@@ -20,6 +20,7 @@ import Data.Set (Set)
 import Data.Set as Set
 import Data.Set.NonEmpty as NonEmptySet
 import Data.Tuple (Tuple(..))
+import Debug (traceM)
 import Effect.Aff (Aff, parallel, sequential)
 import Effect.Class (liftEffect)
 import Effect.Class.Console as Console
@@ -98,6 +99,7 @@ basicBuildMain options = do
       <*> parallel options.resolveExternalDirectives
   let defaultDirectives = (parseDirectiveFile Defaults.defaultDirectives).directives
   let allDirectives = Map.union externalDirectives defaultDirectives
+  traceM {allDirectives}
   coreFnModulesFromOutput coreFnDir (pure "**") >>= case _ of
     Left errors -> do
       for_ errors \(Tuple filePath err) -> do

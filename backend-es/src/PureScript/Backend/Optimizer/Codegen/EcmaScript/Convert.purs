@@ -315,6 +315,7 @@ codegenExpr env@(CodegenEnv { currentModule, inlineApp }) tcoExpr@(TcoExpr _ exp
     codegenEffectBlock env tcoExpr
   EffectDefer _ ->
     codegenEffectBlock env tcoExpr
+  DynamicImport mod val -> build $ EsDynamicImport (unwrap mod) (unwrap val)
 
 codegenPureBlock :: CodegenEnv -> TcoExpr -> EsExpr
 codegenPureBlock env a = build $ EsCall (esArrowFunction [] (codegenBlockStatements pureMode env a)) []
@@ -843,6 +844,7 @@ isLazyBinding currentModule group (Tuple _ tcoExpr) = go tcoExpr
       false
     UncurriedEffectApp _ _ ->
       false
+    DynamicImport _ _ -> false
 
 lookupCtorInfo :: CodegenEnv -> Qualified Ident -> { ctorMeta :: CtorMeta, size :: Int }
 lookupCtorInfo (CodegenEnv env) qual = case Map.lookup qual env.implementations of

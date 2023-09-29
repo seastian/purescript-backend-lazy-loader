@@ -1,3 +1,5 @@
+process.env.DEBUG_DEPTH=10;
+
 export const time_ = name => k => {
   console.time(name);
   const res = k();

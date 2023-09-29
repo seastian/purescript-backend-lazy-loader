@@ -16,6 +16,8 @@ import Data.Foldable (foldl)
 import Data.FoldableWithIndex (foldlWithIndex)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
+import Data.Set (Set)
+import Data.Set as Set
 import Data.String (Pattern(..))
 import Data.String as String
 import Data.Tuple (Tuple(..), fst)
@@ -47,26 +49,53 @@ type DirectiveHeaderResult =
   { errors :: Array (Tuple String PositionedError)
   , locals :: InlineDirectiveMap
   , exports :: InlineDirectiveMap
+  , dynamicImports :: Set String
+
   }
 
 parseDirectiveHeader :: ModuleName -> Array Comment -> DirectiveHeaderResult
-parseDirectiveHeader moduleName = foldl go { errors: [], locals: Map.empty, exports: Map.empty }
+parseDirectiveHeader moduleName = foldl go
+  { errors: []
+  , locals: Map.empty
+  , exports: Map.empty
+  , dynamicImports: Set.empty
+  }
   where
-  go { errors, locals, exports } = case _ of
+  go { errors, locals, exports, dynamicImports } = case _ of
     LineComment str
       | Just line <- String.stripPrefix (Pattern "@inline") $ String.trim str -> do
           let line' = String.trim line -- Trim again for leading space, makes errors better.
-          case runParser (lex line') parser of
+          case runParser (lex line') directiveParser of
             Left err ->
-              { errors: Array.snoc errors (Tuple line' err), locals, exports }
+              { errors: Array.snoc errors (Tuple line' err)
+              , locals
+              , exports
+              , dynamicImports
+              }
             Right (Tuple (Left (Tuple key (Tuple acc val))) _) ->
-              { errors, locals, exports: insertDirective key acc val exports }
+              { errors
+              , locals
+              , exports: insertDirective key acc val exports
+              , dynamicImports
+              }
             Right (Tuple (Right (Tuple key (Tuple acc val))) _) ->
-              { errors, locals: insertDirective key acc val locals, exports }
-    _ ->
-      { errors, locals, exports }
+              { errors
+              , locals: insertDirective key acc val locals
+              , exports
+              , dynamicImports
+              }
+      | Just line <- String.stripPrefix (Pattern "@dynamic import") $ String.trim str -> do
+          let line' = String.trim line
+          { errors
+          , locals
+          , exports
+          , dynamicImports: Set.insert line' dynamicImports
+          }
 
-  parser =
+    _ ->
+      { errors, locals, exports, dynamicImports }
+
+  directiveParser =
     Left <$> parseDirectiveExport moduleName <|> Right <$> parseDirective
 
 parseDirectiveLine :: String -> Either PositionedError (Maybe (Tuple EvalRef (Tuple InlineAccessor InlineDirective)))

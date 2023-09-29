@@ -20,6 +20,7 @@ import PureScript.Backend.Optimizer.Convert (OptimizationSteps)
 import PureScript.Backend.Optimizer.CoreFn (Ident(..), Literal(..), ModuleName(..), Prop(..), ProperName(..), Qualified(..))
 import PureScript.Backend.Optimizer.Semantics (BackendExpr, BackendRewrite(..), DistOp(..), UnpackOp(..), foldBackendExpr)
 import PureScript.Backend.Optimizer.Syntax (BackendAccessor(..), BackendEffect(..), BackendOperator(..), BackendOperator1(..), BackendOperator2(..), BackendOperatorNum(..), BackendOperatorOrd(..), BackendSyntax(..), Level(..), Pair(..))
+import Safe.Coerce (coerce)
 
 heading :: forall a. String -> Doc a -> Doc a
 heading repeat hd =
@@ -283,6 +284,12 @@ printBackendSyntax = case _ of
     printBackendEffect backendEffect
   PrimUndefined ->
     primOp "" "undefined"
+  DynamicImport module' val ->
+    Tuple PrecAtom $ fold
+      [ (D.text $ "import(" <> coerce module' <> ")")
+      , printBackendAccessor $ GetProp $ coerce val
+      ]
+  --  Tuple PrecAtom $ (D.text $ "import(" <> coerce module' <> ")")
   Fail _ ->
     printUncurriedApp false (primOp "" "fail") []
 

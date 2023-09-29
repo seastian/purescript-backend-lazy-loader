@@ -10,6 +10,12 @@ traceWhen bool a b = if bool then traceImpl a \_ -> b else b
 spyWhen :: forall a. DebugWarning => Boolean -> a -> a
 spyWhen bool a = traceWhen bool a a
 
+traceWhenA :: forall f a. Bind f => Applicative f => Boolean -> a -> f Unit
+traceWhenA bool a = do 
+  pure unit
+  let _ = traceWhen bool a 
+  pure unit
+
 foreign import time_ :: forall a. String -> (Unit -> a) -> a
 
 foreign import traceImpl :: forall a b. a -> (Unit -> b) -> b

@@ -1,6 +1,8 @@
 { name = "snapshots"
 , dependencies =
-  [ "arrays"
+  [ "aff"
+  , "aff-promise"
+  , "arrays"
   , "console"
   , "convertable-options"
   , "effect"

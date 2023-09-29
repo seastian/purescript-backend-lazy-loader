@@ -23,7 +23,8 @@ import Data.String as String
 import Data.Tuple (Tuple(..), fst, snd)
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.Backend.Optimizer.Analysis (class HasAnalysis, BackendAnalysis(..), Capture(..), Complexity(..), ResultTerm(..), Usage(..), analysisOf, analyze, analyzeEffectBlock, bound, bump, complex, resultOf, updated, withResult, withRewrite)
-import PureScript.Backend.Optimizer.CoreFn (ConstructorType, Ident(..), Literal(..), ModuleName, Prop(..), ProperName, Qualified(..), findProp, propKey, propValue)
+import PureScript.Backend.Optimizer.Codegen.EcmaScript.Syntax (EsSyntax(..))
+import PureScript.Backend.Optimizer.CoreFn (ConstructorType, Ident(..), Literal(..), ModuleName(..), Prop(..), ProperName, Qualified(..), findProp, propKey, propValue)
 import PureScript.Backend.Optimizer.Syntax (class HasSyntax, BackendAccessor(..), BackendEffect, BackendOperator(..), BackendOperator1(..), BackendOperator2(..), BackendOperatorNum(..), BackendOperatorOrd(..), BackendSyntax(..), Level(..), Pair(..), syntaxOf)
 import PureScript.Backend.Optimizer.Utils (foldl1Array, foldr1Array)
 
@@ -61,6 +62,7 @@ data BackendSemantics
   | NeutUncurriedEffectApp BackendSemantics (Array BackendSemantics)
   | NeutPrimOp (BackendOperator BackendSemantics)
   | NeutPrimEffect (BackendEffect BackendSemantics)
+  | SemDynamicImport ModuleName Ident
   | NeutPrimUndefined
 
 data SemConditional a = SemConditional (Lazy a) (Lazy a)
@@ -285,6 +287,8 @@ instance Eval f => Eval (BackendSyntax f) where
       NeutCtorDef (Qualified (Just (unwrap env).currentModule) tag) ct ty tag fields
     CtorSaturated qual ct ty tag fields ->
       guardFailOver snd (map (eval env) <$> fields) $ NeutData qual ct ty tag
+    DynamicImport mod val -> 
+      SemDynamicImport mod val
 
 instance Eval BackendExpr where
   eval = go
@@ -1113,6 +1117,7 @@ analysisFromDirective (BackendAnalysis analysis) = case _ of
     BackendAnalysis analysis { args = Array.take n analysis.args }
   InlineDefault ->
     BackendAnalysis analysis
+  DynamicImportDir -> mempty
 
 liftBoolean :: Boolean -> BackendSemantics
 liftBoolean = NeutLit <<< LitBoolean
@@ -1268,6 +1273,7 @@ quote = go
       build ctx PrimUndefined
     NeutFail err ->
       build ctx $ Fail err
+    SemDynamicImport mod val -> build ctx $ DynamicImport mod val
 
 build :: Ctx -> BackendSyntax BackendExpr -> BackendExpr
 build ctx = case _ of

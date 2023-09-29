@@ -58,6 +58,8 @@ type BuildArgs =
   , directivesFile :: Maybe FilePath
   , intTags :: Boolean
   , traceIdents :: Set (Qualified Ident)
+  , dynamicImportModule :: Maybe String
+  , dynamicImportValue :: Maybe String
   }
 
 buildArgsParser :: ArgParser BuildArgs
@@ -99,6 +101,15 @@ buildArgsParser =
                       Left $ "Unable to parse qualified name: " <> str
               )
           # ArgParser.folded
+
+    , dynamicImportModule:
+        ArgParser.argument [ "--foreign-dir" ]
+          "Path to directory for foreign module overrides (optional)."
+          # ArgParser.optional
+    , dynamicImportValue:
+        ArgParser.argument [ "--foreign-dir" ]
+          "Path to directory for foreign module overrides (optional)."
+          # ArgParser.optional
     }
 
 data TargetPlatform = Browser | Node
@@ -225,7 +236,13 @@ main cliRoot =
           let allDoc = Dodo.foldWithSeparator (Dodo.break <> Dodo.break) $ uncurry printModuleSteps <$> allSteps
           FS.writeTextFile UTF8 "optimization-traces.txt" $ Dodo.print Dodo.plainText Dodo.twoSpaces allDoc
     , onCodegenModule: \build (Module coreFnMod) backendMod@{ name: ModuleName name } optimizationSteps -> do
-        let formatted = Dodo.print Dodo.plainText (Dodo.twoSpaces { pageWidth = 180, ribbonRatio = 1.0 }) $ codegenModule { intTags: args.intTags } build.implementations backendMod
+        let
+          formatted = Dodo.print Dodo.plainText (Dodo.twoSpaces { pageWidth = 180, ribbonRatio = 1.0 })
+            $ codegenModule
+                { intTags: args.intTags
+                }
+                build.implementations
+                backendMod
         let modPath = Path.concat [ args.outputDir, name ]
         mkdirp modPath
         writeTextFile UTF8 (Path.concat [ modPath, "index.js" ]) formatted

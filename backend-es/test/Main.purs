@@ -23,6 +23,7 @@ import Data.String as String
 import Data.String.CodeUnits as SCU
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), uncurry)
+import Debug (traceM)
 import Dodo as Dodo
 import Effect (Effect)
 import Effect.Aff (Aff, Error, attempt, launchAff_)
@@ -116,6 +117,18 @@ runSnapshotTests { accept, filter, traceIdents } = do
       liftEffect $ Process.exit 1
     Right coreFnModules -> do
       let { directives } = parseDirectiveFile defaultDirectives
+      -- let
+      --   dirs :: Array _
+      --   dirs = 
+      --     map Map.toUnfoldable directives
+      --     # Map.toUnfoldable
+      --     -- # join
+      -- traceM
+      --   { directives:
+      --       Array.fromFoldable directives
+      --         # map Map.toUnfoldable
+      --         # join
+      --   }
       copyFile (Path.concat [ "..", "..", "runtime.js" ]) (Path.concat [ testOut, "runtime.js" ])
       stepsRef <- liftEffect $ Ref.new []
       coreFnModules # buildModules

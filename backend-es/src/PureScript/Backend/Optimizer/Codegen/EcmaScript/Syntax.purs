@@ -91,6 +91,7 @@ data EsSyntax a
   | EsReturn (Maybe a)
   | EsContinue
   | EsUndefined
+  | EsDynamicImport String String
 
 derive instance Functor EsSyntax
 
@@ -123,6 +124,7 @@ instance Foldable EsSyntax where
     EsReturn a -> foldMap f a
     EsContinue -> mempty
     EsUndefined -> mempty
+    EsDynamicImport _ _ -> mempty
 
 data EsArrayElement a
   = EsArrayValue a
@@ -479,6 +481,12 @@ print opts syn = case syn of
     Tuple EsPrecStatement $ Dodo.text "continue"
   EsUndefined ->
     Tuple EsPrecAtom $ Dodo.text "undefined"
+  EsDynamicImport moduleName valueName ->
+    Tuple EsPrecCall $
+      esApp (Dodo.text "$runtime.dynamicImport")
+        [ esString moduleName
+        , esString valueName
+        ]
 
 printEsBinaryOp :: forall a. PrintOptions -> EsBinaryFixity -> EsExpr -> EsExpr -> Tuple EsPrec (Dodo.Doc a)
 printEsBinaryOp opts f1 (EsExpr _ lhs) (EsExpr _ rhs) =
