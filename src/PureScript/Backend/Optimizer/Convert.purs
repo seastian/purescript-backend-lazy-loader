@@ -77,7 +77,7 @@ import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import PureScript.Backend.Optimizer.Analysis (BackendAnalysis)
 import PureScript.Backend.Optimizer.CoreFn (Ann(..), Bind(..), Binder(..), Binding(..), CaseAlternative(..), CaseGuard(..), Comment, ConstructorType(..), Expr(..), Guard(..), Ident(..), Literal(..), Meta(..), Module(..), ModuleName(..), ProperName, Qualified(..), ReExport, exprAnn, findProp, propKey, propValue, qualifiedModuleName, unQualified)
 import PureScript.Backend.Optimizer.Directives (DirectiveHeaderResult, parseDirectiveHeader)
-import PureScript.Backend.Optimizer.Semantics (BackendExpr(..), BackendSemantics, Ctx, DataTypeMeta, Env(..), EvalRef(..), ExternImpl(..), ExternSpine, InlineAccessor(..), InlineDirective(..), InlineDirectiveMap, NeutralExpr(..), build, evalExternFromImpl, evalExternRefFromImpl, freeze, optimize)
+import PureScript.Backend.Optimizer.Semantics (BackendExpr(..), BackendSemantics, Ctx, DataTypeMeta, DirectiveMap, Env(..), EvalRef(..), ExternImpl(..), ExternSpine, ImportDirective(..), InlineAccessor(..), InlineDirective(..), NeutralExpr(..), build, evalExternFromImpl, evalExternRefFromImpl, freeze, onInline, optimize)
 import PureScript.Backend.Optimizer.Semantics.Foreign (ForeignEval)
 import PureScript.Backend.Optimizer.Syntax (BackendAccessor(..), BackendOperator(..), BackendOperator1(..), BackendOperator2(..), BackendOperatorOrd(..), BackendSyntax(..), Level(..), Pair(..))
 import PureScript.Backend.Optimizer.Utils (foldl1Array)
@@ -101,7 +101,7 @@ type BackendModule =
   , reExports :: Set ReExport
   , foreign :: Set Ident
   , implementations :: BackendImplementations
-  , directives :: InlineDirectiveMap
+  , directives :: DirectiveMap
   }
 
 type ConvertEnv =
@@ -112,7 +112,7 @@ type ConvertEnv =
   , implementations :: BackendImplementations
   , moduleImplementations :: BackendImplementations
   , optimizationSteps :: OptimizationSteps
-  , directives :: InlineDirectiveMap
+  , directives :: DirectiveMap
   , foreignSemantics :: Map (Qualified Ident) ForeignEval
   , rewriteLimit :: Int
   , traceIdents :: Set (Qualified Ident)
@@ -152,12 +152,19 @@ toBackendModule (Module mod) env = do
     moduleBindings = toBackendTopLevelBindingGroups mod.decls env
       { dataTypes = dataTypes
       , directives =
-          foldlWithIndex
-            ( \qual dirs dir ->
-                Map.alter (maybe (Just dir) Just) qual dirs
-            )
-            (Map.union directives.locals env.directives)
-            directives.exports
+          { inline: foldlWithIndex
+              ( \qual dirs dir ->
+                  Map.alter (maybe (Just dir) Just) qual dirs
+              )
+              (Map.union directives.locals.inline env.directives.inline)
+              directives.exports.inline
+          , imports: foldlWithIndex
+              ( \qual dirs dir ->
+                  Map.alter (maybe (Just dir) Just) qual dirs
+              )
+              (Map.union directives.locals.imports env.directives.imports)
+              directives.exports.imports
+          }
       , moduleImplementations = Map.empty
       }
 
@@ -263,13 +270,15 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
       , directives =
           case inferTransitiveDirective env.directives (snd impl) backendExpr cfn of
             Just dirs ->
-              Map.alter
-                case _ of
-                  Just oldDirs ->
-                    Just $ Map.union oldDirs dirs
-                  Nothing ->
-                    Just dirs
-                (EvalExtern (Qualified (Just env.currentModule) ident))
+              onInline
+                ( Map.alter
+                    case _ of
+                      Just oldDirs ->
+                        Just $ Map.union oldDirs dirs
+                      Nothing ->
+                        Just dirs
+                    (EvalExtern (Qualified (Just env.currentModule) ident))
+                )
                 env.directives
             Nothing ->
               env.directives
@@ -277,8 +286,8 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
   , value: Tuple ident (Tuple (unwrap (fst impl)).deps expr')
   }
 
-inferTransitiveDirective :: InlineDirectiveMap -> ExternImpl -> BackendExpr -> Expr Ann -> Maybe (Map InlineAccessor InlineDirective)
-inferTransitiveDirective directives impl backendExpr cfn = fromImpl <|> fromBackendExpr
+inferTransitiveDirective :: DirectiveMap -> ExternImpl -> BackendExpr -> Expr Ann -> Maybe (Map InlineAccessor InlineDirective)
+inferTransitiveDirective { inline: directives } impl backendExpr cfn = fromImpl <|> fromBackendExpr
   where
   fromImpl = case impl of
     ExternExpr _ (NeutralExpr (App (NeutralExpr (Var qual)) args)) ->
@@ -480,8 +489,6 @@ toBackendExpr =
         )
         exprs
         []
-    ExprDynamicImport _ moduleName ident ->
-      make $ DynamicImport moduleName ident
   where
   getDynamicImport :: Expr Ann -> Expr Ann -> ConvertM (Maybe BackendExpr)
   getDynamicImport a b = do
@@ -513,7 +520,7 @@ toBackendExpr =
         case neutrExprMb of
           Just ne@(NeutralExpr (Abs arg body)) -> do
             pure $ Just $ neutralToBE ne
-            -- ExprSyntax mempty $ Abs args $ ?neutrExprMb a'
+          -- ExprSyntax mempty $ Abs args $ ?neutrExprMb a'
           _ -> pure Nothing
 
       -- case b of 
@@ -548,11 +555,11 @@ toBackendExpr =
   --       pure Nothing
   -- else
   --   pure Nothing
-  getExprDir :: Expr Ann -> ConvertM (Maybe InlineDirective)
+  getExprDir :: Expr Ann -> ConvertM (Maybe ImportDirective)
   getExprDir = case _ of
     ExprVar (Ann { span }) id -> do
-      { directives } <- ask
-      pure $ Map.lookup (EvalExtern id) directives >>= Map.lookup InlineRef
+      { directives: { imports } } <- ask
+      pure $ Map.lookup (EvalExtern id) imports >>= Map.lookup InlineRef
     _ -> pure Nothing
 
   getExprIdent :: Expr Ann -> Maybe (Qualified Ident)

@@ -42,6 +42,7 @@ import PureScript.Backend.Optimizer.Codegen.EcmaScript (codegenModule, esModuleP
 import PureScript.Backend.Optimizer.Codegen.EcmaScript.Builder (basicBuildMain, externalDirectivesFromFile)
 import PureScript.Backend.Optimizer.Codegen.EcmaScript.Foreign (esForeignSemantics)
 import PureScript.Backend.Optimizer.CoreFn (Ident(..), Module(..), ModuleName(..), Qualified(..))
+import PureScript.Backend.Optimizer.Semantics (emptyDirectiveMap)
 import PureScript.Backend.Optimizer.Semantics.Foreign (coreForeignSemantics)
 import PureScript.Backend.Optimizer.Tracer.Printer (printModuleSteps)
 import PureScript.CST.Lexer (lexToken)
@@ -224,7 +225,7 @@ main cliRoot =
   buildCmd :: BuildArgs -> Aff Unit
   buildCmd args = liftEffect (Ref.new []) >>= \stepsRef -> basicBuildMain
     { resolveCoreFnDirectory: pure args.coreFnDir
-    , resolveExternalDirectives: map (fromMaybe Map.empty) $ traverse externalDirectivesFromFile args.directivesFile
+    , resolveExternalDirectives: map (fromMaybe emptyDirectiveMap) $ traverse externalDirectivesFromFile args.directivesFile
     , foreignSemantics: Map.union coreForeignSemantics esForeignSemantics
     , onCodegenBefore: do
         mkdirp args.outputDir

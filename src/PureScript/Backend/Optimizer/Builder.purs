@@ -16,7 +16,7 @@ import Data.Tuple (Tuple(..))
 import PureScript.Backend.Optimizer.Analysis (BackendAnalysis)
 import PureScript.Backend.Optimizer.Convert (BackendModule, OptimizationSteps, toBackendModule)
 import PureScript.Backend.Optimizer.CoreFn (Ann, Ident, Module(..), Qualified)
-import PureScript.Backend.Optimizer.Semantics (ExternImpl, InlineDirectiveMap)
+import PureScript.Backend.Optimizer.Semantics (DirectiveMap, ExternImpl)
 import PureScript.Backend.Optimizer.Semantics.Foreign (ForeignEval)
 
 type BuildEnv =
@@ -26,7 +26,7 @@ type BuildEnv =
   }
 
 type BuildOptions m =
-  { directives :: InlineDirectiveMap
+  { directives :: DirectiveMap
   , foreignSemantics :: Map (Qualified Ident) ForeignEval
   , onPrepareModule :: BuildEnv -> Module Ann -> m (Module Ann)
   , onCodegenModule :: BuildEnv -> Module Ann -> BackendModule -> OptimizationSteps -> m Unit
@@ -61,7 +61,10 @@ buildModules options coreFnModules =
         foldrWithIndex Map.insert implementations backendMod.implementations
     options.onCodegenModule (buildEnv { implementations = newImplementations }) coreFnModule' backendMod optimizationSteps
     pure
-      { directives: foldrWithIndex Map.insert directives backendMod.directives
+      { directives:
+          { inline: foldrWithIndex Map.insert directives.inline backendMod.directives.inline
+          , imports: foldrWithIndex Map.insert directives.imports backendMod.directives.imports
+          }
       , implementations: newImplementations
       , moduleIndex: moduleIndex + 1
       }
