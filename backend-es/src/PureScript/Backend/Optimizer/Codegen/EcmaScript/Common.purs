@@ -14,7 +14,9 @@ module PureScript.Backend.Optimizer.Codegen.EcmaScript.Common
   , esNumber
   , esString
   , esTernary
-  ) where
+  , esThunk
+  )
+  where
 
 import Prelude
 
@@ -223,6 +225,9 @@ esApp a bs =
     a <> Dodo.Common.jsParens args
   where
   args = Dodo.foldWithSeparator Dodo.Common.trailingComma bs
+
+esThunk :: forall a. Dodo.Doc a -> Dodo.Doc a
+esThunk a = Dodo.text "(() => " <> a <> Dodo.text ")"
 
 esComment :: forall a. Comment -> Dodo.Doc a
 esComment = case _ of
