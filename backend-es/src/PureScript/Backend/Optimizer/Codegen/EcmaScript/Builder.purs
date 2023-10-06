@@ -14,13 +14,11 @@ import Data.Foldable (foldl, for_)
 import Data.Lazy as Lazy
 import Data.List (List)
 import Data.Map (Map)
-import Data.Map as Map
 import Data.Maybe (maybe)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.Set.NonEmpty as NonEmptySet
 import Data.Tuple (Tuple(..))
-import Debug (traceM)
 import Effect.Aff (Aff, parallel, sequential)
 import Effect.Class (liftEffect)
 import Effect.Class.Console as Console

@@ -43,14 +43,69 @@
 -- |                 2. put a copy of the row in Problem B
 -- |         3. If the chosen column is an expandable type, recurse on Problem A
 -- |         4. Otherwise, guard against the chosen pattern, recursing on Problem A if it succeeds and recursing on Problem B if it fails.
-module PureScript.Backend.Optimizer.Convert where
+module PureScript.Backend.Optimizer.Convert
+  ( BackendBindingGroup
+  , BackendImplementations
+  , BackendModule
+  , CaseRow
+  , CaseRowGuardedExpr(..)
+  , ConvertEnv
+  , ConvertM
+  , DecomposeResult
+  , DecomposedCaseRow
+  , OptimizationSteps
+  , Pattern(..)
+  , PatternCase(..)
+  , SubPattern
+  , TopPattern
+  , WithDeps
+  , binderToPattern
+  , buildCaseLeaf
+  , buildCasePattern
+  , buildCaseTreeFromRows
+  , buildM
+  , chooseNextPattern
+  , currentLevel
+  , decompose
+  , fromExternImpl
+  , getCtx
+  , guardArrayLength
+  , guardBoolean
+  , guardChar
+  , guardInt
+  , guardNumber
+  , guardString
+  , guardTag
+  , intro
+  , levelUp
+  , make
+  , makeExternEvalRef
+  , makeExternEvalSpine
+  , makeGuard
+  , makeLet
+  , makeUncurriedAbs
+  , normalizeCaseRows
+  , patternFail
+  , patternPatCase
+  , patternSubterms
+  , patternVars
+  , toBackendBinding
+  , toBackendExpr
+  , toBackendModule
+  , toBackendTopLevelBindingGroup
+  , toBackendTopLevelBindingGroups
+  , toCaseRowVars
+  , toExternImpl
+  , toTopLevelBackendBinding
+  , topEnv
+  ) where
 
 import Prelude
 
 import Control.Alternative (guard, (<|>))
 import Control.Monad.RWS (ask)
 import Data.Array as Array
-import Data.Array.NonEmpty (NonEmptyArray)
+import Data.Array.NonEmpty (NonEmptyArray, findMap)
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Bifunctor (lmap)
 import Data.Foldable (foldMap, foldl)
@@ -283,8 +338,32 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
             Nothing ->
               env.directives
       }
-  , value: Tuple ident (Tuple (unwrap (fst impl)).deps expr')
+  , value: Tuple ident (Tuple (unwrap (fst impl)).deps $ replaceDynamicImports expr')
   }
+  where
+  replaceDynamicImports :: NeutralExpr -> NeutralExpr
+  replaceDynamicImports ne = replaceDynamicImportsExpr maxDepth ne
+
+  maxDepth = 8
+
+  replaceDynamicImportsExpr :: Int -> NeutralExpr -> NeutralExpr
+  replaceDynamicImportsExpr 0 e = e
+  replaceDynamicImportsExpr d (NeutralExpr expr) = NeutralExpr $ expr
+    <#> case _ of
+      NeutralExpr (App (NeutralExpr (Var qIdent)) b)
+        | Just DynamicImportDir <- getExprDir env qIdent
+        , Just { moduleName, exprIdent } <- getIdentQualified b ->
+            NeutralExpr $ DynamicImport moduleName exprIdent
+      e -> replaceDynamicImportsExpr (d - 1) $ e
+
+  getExprDir :: ConvertEnv -> _ -> (Maybe ImportDirective)
+  getExprDir { directives: { imports } } id =
+    Map.lookup (EvalExtern id) imports >>= Map.lookup InlineRef
+
+  getIdentQualified :: NonEmptyArray NeutralExpr -> Maybe { moduleName :: ModuleName, exprIdent :: Ident }
+  getIdentQualified = findMap case _ of 
+    NeutralExpr (Var (Qualified (Just moduleName) exprIdent)) -> Just { moduleName, exprIdent } 
+    _ -> Nothing
 
 inferTransitiveDirective :: DirectiveMap -> ExternImpl -> BackendExpr -> Expr Ann -> Maybe (Map InlineAccessor InlineDirective)
 inferTransitiveDirective { inline: directives } impl backendExpr cfn = fromImpl <|> fromBackendExpr
@@ -501,13 +580,12 @@ toBackendExpr =
               Qualified (Just moduleName) ident ->
                 Just <$> (make $ DynamicImport moduleName ident)
               _ -> do
-                traceM { meta, qi }
                 pure Nothing
           _ -> pure Nothing
 
       Just DynamicImportAbstraction -> do
         traceM "DynamicImportAbstraction"
-        { implementations } <- ask
+        { implementations, directives: { imports, inline } } <- ask
 
         let
           neutrExprMb :: Maybe NeutralExpr
@@ -516,10 +594,22 @@ toBackendExpr =
               >>= flip Map.lookup implementations
               <#> snd
               >>= fromExternImpl
+
+          toObj :: forall k v. Show k => Map k v -> Object.Object v
+          toObj = (Object.fromFoldable :: Array _ -> _) <<< map (\(Tuple k v) -> Tuple (show k) v) <<< Map.toUnfoldable
         -- Just <$> ?d a
+
+        traceM
+          { a
+          , b
+          , neutrExprMb
+          , imports: toObj imports # map toObj
+          , inline: toObj inline # map toObj
+          }
+
         case neutrExprMb of
-          Just ne@(NeutralExpr (Abs arg body)) -> do
-            pure $ Just $ neutralToBE ne
+          -- Just ne@(NeutralExpr (Abs arg body)) -> do
+          --   pure $ Just $ neutralToBE ne
           -- ExprSyntax mempty $ Abs args $ ?neutrExprMb a'
           _ -> pure Nothing
 

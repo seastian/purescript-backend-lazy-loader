@@ -1,5 +1,7 @@
 -- @inline dynamicImport never
 -- @inline export dynamicImport never
+-- @inline dynamicImportAff always
+-- @inline export dynamicImportAff always
 -- @dynamic-import dynamicImport
 -- @dynamic-import export dynamicImport
 -- @abstraction-dynamic-import dynamicImportAff
