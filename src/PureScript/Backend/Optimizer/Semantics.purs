@@ -25,8 +25,7 @@ import Data.String as String
 import Data.Tuple (Tuple(..), fst, snd)
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.Backend.Optimizer.Analysis (class HasAnalysis, BackendAnalysis(..), Capture(..), Complexity(..), ResultTerm(..), Usage(..), analysisOf, analyze, analyzeEffectBlock, bound, bump, complex, resultOf, updated, withResult, withRewrite)
-import PureScript.Backend.Optimizer.Codegen.EcmaScript.Syntax (EsSyntax(..))
-import PureScript.Backend.Optimizer.CoreFn (ConstructorType, Ident(..), Literal(..), ModuleName(..), Prop(..), ProperName, Qualified(..), findProp, propKey, propValue)
+import PureScript.Backend.Optimizer.CoreFn (ConstructorType, Ident(..), Literal(..), ModuleName, Prop(..), ProperName, Qualified(..), findProp, propKey, propValue)
 import PureScript.Backend.Optimizer.Syntax (class HasSyntax, BackendAccessor(..), BackendEffect, BackendOperator(..), BackendOperator1(..), BackendOperator2(..), BackendOperatorNum(..), BackendOperatorOrd(..), BackendSyntax(..), Level(..), Pair(..), syntaxOf)
 import PureScript.Backend.Optimizer.Utils (foldl1Array, foldr1Array)
 
@@ -152,6 +151,7 @@ derive instance Ord EvalRef
 derive instance Generic EvalRef _
 instance Show EvalRef where
   show = genericShow
+
 data InlineAccessor
   = InlineProp String
   | InlineSpineProp String
@@ -169,7 +169,8 @@ data InlineDirective
   | InlineAlways
   | InlineArity Int
   | DynamicImportDir
-  
+  | DynamicImportAbstraction
+
 derive instance Eq InlineDirective
 derive instance Ord InlineDirective
 type InlineDirectiveMap = Map EvalRef (Map InlineAccessor InlineDirective)
@@ -198,6 +199,18 @@ insertDirective ref acc dir = Map.alter
     Nothing ->
       Just $ Map.singleton acc dir
   ref
+
+insertDirectives
+  :: Array
+       { ref :: EvalRef
+       , acc :: InlineAccessor
+       , dir :: InlineDirective
+       }
+  -> InlineDirectiveMap
+  -> InlineDirectiveMap
+insertDirectives dirs mp = foldl go mp dirs
+  where
+  go env { ref, acc, dir } = insertDirective ref acc dir env
 
 addStop :: Env -> EvalRef -> InlineAccessor -> Env
 addStop (Env env) ref acc = Env env
@@ -1128,6 +1141,7 @@ analysisFromDirective (BackendAnalysis analysis) = case _ of
   InlineDefault ->
     BackendAnalysis analysis
   DynamicImportDir -> mempty
+  DynamicImportAbstraction -> mempty
 
 liftBoolean :: Boolean -> BackendSemantics
 liftBoolean = NeutLit <<< LitBoolean

@@ -451,8 +451,7 @@ toBackendExpr =
       | otherwise -> do
           dynamicImport <- getDynamicImport a b
           case dynamicImport of
-            Just { moduleName, ident } -> do
-              make $ DynamicImport moduleName ident
+            Just importExpr -> pure importExpr
             Nothing -> do
               make $ App (toBackendExpr a) (NonEmptyArray.singleton (toBackendExpr b))
     ExprLet _ binds body ->
@@ -481,26 +480,87 @@ toBackendExpr =
         )
         exprs
         []
+    ExprDynamicImport _ moduleName ident ->
+      make $ DynamicImport moduleName ident
   where
-  getDynamicImport :: Expr Ann -> Expr Ann -> ConvertM (Maybe { moduleName :: ModuleName, ident :: Ident })
+  getDynamicImport :: Expr Ann -> Expr Ann -> ConvertM (Maybe BackendExpr)
   getDynamicImport a b = do
-    isDynamicImport <- getIsDynamicImport a
-    if isDynamicImport then
-      case b of
-        ExprVar _ qi -> do
-          case qi of
-            Qualified (Just moduleName) ident -> pure $ Just { moduleName, ident }
-            _ -> pure Nothing
-        _ -> pure Nothing
-    else
-      pure Nothing
+    dir <- getExprDir a
+    case dir of
+      Just DynamicImportDir ->
+        case b of
+          ExprVar meta qi -> do
+            case qi of
+              Qualified (Just moduleName) ident ->
+                Just <$> (make $ DynamicImport moduleName ident)
+              _ -> do
+                traceM { meta, qi }
+                pure Nothing
+          _ -> pure Nothing
 
-  getIsDynamicImport :: Expr Ann -> ConvertM Boolean
-  getIsDynamicImport = case _ of
-    ExprVar _ id -> do
+      Just DynamicImportAbstraction -> do
+        traceM "DynamicImportAbstraction"
+        { implementations } <- ask
+
+        let
+          neutrExprMb :: Maybe NeutralExpr
+          neutrExprMb =
+            getExprIdent a
+              >>= flip Map.lookup implementations
+              <#> snd
+              >>= fromExternImpl
+        -- Just <$> ?d a
+        case neutrExprMb of
+          Just ne@(NeutralExpr (Abs arg body)) -> do
+            pure $ Just $ neutralToBE ne
+            -- ExprSyntax mempty $ Abs args $ ?neutrExprMb a'
+          _ -> pure Nothing
+
+      -- case b of 
+
+      --   ExprVar meta qi -> do
+      --     case qi of
+      --       Qualified (Just moduleName) ident ->
+      --         pure $ Just $ ExprDynamicImport meta moduleName ident
+      --       _ -> do
+      --         traceM { meta, qi }
+      --         pure Nothing
+      --   -- _ -> pure Nothing
+
+      _ -> pure Nothing
+
+  neutralToBE :: NeutralExpr -> BackendExpr
+  neutralToBE (NeutralExpr expr) = ExprSyntax mempty $ map neutralToBE expr
+
+  -- isDynamicImport <- getIsDynamicImport a
+  -- if isDynamicImport then do
+  --   traceM { b }
+  --   case b of
+  -- ExprVar meta qi -> do
+  --   case qi of
+  --     Qualified (Just moduleName) ident ->
+  --       Just <$> (make $ DynamicImport moduleName ident)
+  --     _ -> do
+  --       traceM { meta, qi }
+  --       pure Nothing
+  --     other -> do
+  --       traceM { other }
+  --       pure Nothing
+  -- else
+  --   pure Nothing
+  getExprDir :: Expr Ann -> ConvertM (Maybe InlineDirective)
+  getExprDir = case _ of
+    ExprVar (Ann { span }) id -> do
       { directives } <- ask
-      pure $ (Map.lookup (EvalExtern id) directives >>= Map.lookup InlineRef) == Just DynamicImportDir
-    _ -> pure false
+      pure $ Map.lookup (EvalExtern id) directives >>= Map.lookup InlineRef
+    _ -> pure Nothing
+
+  getExprIdent :: Expr Ann -> Maybe (Qualified Ident)
+  getExprIdent = case _ of
+    ExprVar _ qi -> Just qi
+    _ -> Nothing
+
+  -- getNeutralExpr 
 
   toInitialCaseRows :: Array Level -> Array (CaseAlternative Ann) -> (Array CaseRow -> ConvertM BackendExpr) -> ConvertM BackendExpr
   toInitialCaseRows idents alts useCaseRowsCb =
