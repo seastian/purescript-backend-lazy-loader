@@ -48,7 +48,7 @@ import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..), fst, snd)
 import Dodo as Dodo
 import Dodo.Common as Dodo.Common
-import PureScript.Backend.Optimizer.Codegen.EcmaScript.Common (esAccessor, esApp, esAssign, esBoolean, esEscapeIdent, esEscapeProp, esEscapeSpecial, esIndex, esInt, esModuleName, esNumber, esString, esTernary, esThunk)
+import PureScript.Backend.Optimizer.Codegen.EcmaScript.Common (esAccessor, esApp, esAssign, esBoolean, esEscapeIdent, esEscapeProp, esEscapeSpecial, esIndex, esInt, esModuleName, esNumber, esString, esTernary, esThenAccessor, esThunk)
 import PureScript.Backend.Optimizer.CoreFn (Ident(..), ModuleName(..), Qualified(..))
 
 data EsModuleStatement a
@@ -486,7 +486,7 @@ print opts syn = case syn of
       $ esThunk
       $ esApp (Dodo.text "import")
           [ esString ("../" <> moduleName <> "/index.js")
-          ]
+          ] `esThenAccessor` valueName
 
 printEsBinaryOp :: forall a. PrintOptions -> EsBinaryFixity -> EsExpr -> EsExpr -> Tuple EsPrec (Dodo.Doc a)
 printEsBinaryOp opts f1 (EsExpr _ lhs) (EsExpr _ rhs) =

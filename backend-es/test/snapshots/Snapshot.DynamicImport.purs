@@ -1,5 +1,3 @@
--- | 
-
 module Snapshot.DynamicImport (lazyCharCode) where
 
 import Control.Promise (Promise)
