@@ -315,7 +315,7 @@ codegenExpr env@(CodegenEnv { currentModule, inlineApp }) tcoExpr@(TcoExpr _ exp
     codegenEffectBlock env tcoExpr
   EffectDefer _ ->
     codegenEffectBlock env tcoExpr
-  DynamicImport mod val -> build $ EsDynamicImport (unwrap mod) (unwrap val)
+  DynamicImport path val -> build $ EsDynamicImport (unwrap path) (unwrap val)
 
 codegenPureBlock :: CodegenEnv -> TcoExpr -> EsExpr
 codegenPureBlock env a = build $ EsCall (esArrowFunction [] (codegenBlockStatements pureMode env a)) []

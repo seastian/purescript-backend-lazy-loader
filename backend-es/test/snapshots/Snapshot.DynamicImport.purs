@@ -1,6 +1,6 @@
 -- | 
 
-module Snapshot.LazyLoad (lazyCharCode) where
+module Snapshot.DynamicImport (lazyCharCode) where
 
 import Control.Promise (Promise)
 import Data.Char (toCharCode)

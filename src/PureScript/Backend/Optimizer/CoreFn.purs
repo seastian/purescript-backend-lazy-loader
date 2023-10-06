@@ -4,8 +4,10 @@ import Prelude
 
 import Data.Array as Array
 import Data.Foldable (class Foldable, foldMap, foldlDefault, foldrDefault)
+import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype)
+import Data.Show.Generic (genericShow)
 import Data.String.CodeUnits as SCU
 import Data.Traversable (class Traversable, sequenceDefault, traverse)
 
@@ -14,12 +16,17 @@ newtype Ident = Ident String
 derive newtype instance eqIdent :: Eq Ident
 derive newtype instance ordIdent :: Ord Ident
 derive instance Newtype Ident _
-
+derive instance Generic Ident _
+instance Show Ident where
+  show = genericShow
 newtype ModuleName = ModuleName String
 
 derive newtype instance eqModuleName :: Eq ModuleName
 derive newtype instance ordModuleName :: Ord ModuleName
 derive instance Newtype ModuleName _
+derive instance Generic ModuleName _
+instance Show ModuleName where
+  show = genericShow
 
 newtype ProperName = ProperName String
 
@@ -31,6 +38,9 @@ data Qualified a = Qualified (Maybe ModuleName) a
 derive instance eqQualified :: Eq a => Eq (Qualified a)
 derive instance ordQualified :: Ord a => Ord (Qualified a)
 derive instance Functor Qualified
+derive instance Generic (Qualified a) _
+instance Show a => Show (Qualified a) where
+  show = genericShow
 
 unQualified :: forall a. Qualified a -> a
 unQualified (Qualified _ a) = a

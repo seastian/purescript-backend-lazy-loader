@@ -114,12 +114,12 @@ decodeModule' decodeAnn' json = do
   foreign_ <- getField (decodeArray decodeIdent) obj "foreign"
   comments <- getField (decodeArray decodeComment) obj "comments"
   let 
-  --   _ = spyWhen (path == "./Snapshot.LazyLoad.purs") decls
-    -- _ = spyWhen (path == "./Snapshot.LazyLoad.purs") decls
-    _ = spyWhen (path == "./Snapshot.LazyLoad.purs") comments
-    _ = spyWhen (path == "./Snapshot.LazyLoad.purs") json
+  --   _ = spyWhen (path == "./Snapshot.DynamicImport.purs") decls
+    -- _ = spyWhen (path == "./Snapshot.DynamicImport.purs") decls
+    _ = spyWhen (path == "./Snapshot.DynamicImport.purs") comments
+    _ = spyWhen (path == "./Snapshot.DynamicImport.purs") json
   -- let 
-  -- --   _ = spyWhen (path == "./Snapshot.LazyLoad.purs") decls
+  -- --   _ = spyWhen (path == "./Snapshot.DynamicImport.purs") decls
   --   _ = spyWhen (path == "./DynamicImport.purs") decls
   --   _ = spyWhen (path == "./DynamicImport.purs") comments
   --   _ = spyWhen (path == "./DynamicImport.purs") json

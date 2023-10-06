@@ -52,6 +52,7 @@ import Control.Monad.RWS (ask)
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NonEmptyArray
+import Data.Bifunctor (lmap)
 import Data.Foldable (foldMap, foldl)
 import Data.FoldableWithIndex (foldMapWithIndex, foldlWithIndex, foldrWithIndex)
 import Data.Function (on)
@@ -69,16 +70,19 @@ import Data.Set as Set
 import Data.Traversable (class Foldable, Accum, foldr, for, mapAccumL, mapAccumR, sequence, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), fst, snd)
-import Debug (spy)
+import Debug (spy, spyWith, traceM)
+import Foreign.Object (Object)
+import Foreign.Object as Object
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import PureScript.Backend.Optimizer.Analysis (BackendAnalysis)
-import PureScript.Backend.Optimizer.CoreFn (Ann(..), Bind(..), Binder(..), Binding(..), CaseAlternative(..), CaseGuard(..), Comment, ConstructorType(..), Expr(..), Guard(..), Ident(..), Literal(..), Meta(..), Module(..), ModuleName(..), ProperName, Qualified(..), ReExport, findProp, propKey, propValue, qualifiedModuleName, unQualified)
+import PureScript.Backend.Optimizer.CoreFn (Ann(..), Bind(..), Binder(..), Binding(..), CaseAlternative(..), CaseGuard(..), Comment, ConstructorType(..), Expr(..), Guard(..), Ident(..), Literal(..), Meta(..), Module(..), ModuleName(..), ProperName, Qualified(..), ReExport, exprAnn, findProp, propKey, propValue, qualifiedModuleName, unQualified)
 import PureScript.Backend.Optimizer.Directives (DirectiveHeaderResult, parseDirectiveHeader)
 import PureScript.Backend.Optimizer.Semantics (BackendExpr(..), BackendSemantics, Ctx, DataTypeMeta, Env(..), EvalRef(..), ExternImpl(..), ExternSpine, InlineAccessor(..), InlineDirective(..), InlineDirectiveMap, NeutralExpr(..), build, evalExternFromImpl, evalExternRefFromImpl, freeze, optimize)
 import PureScript.Backend.Optimizer.Semantics.Foreign (ForeignEval)
 import PureScript.Backend.Optimizer.Syntax (BackendAccessor(..), BackendOperator(..), BackendOperator1(..), BackendOperator2(..), BackendOperatorOrd(..), BackendSyntax(..), Level(..), Pair(..))
 import PureScript.Backend.Optimizer.Utils (foldl1Array)
 import Safe.Coerce (coerce)
+import Unsafe.Coerce (unsafeCoerce)
 
 type BackendBindingGroup a b =
   { recursive :: Boolean
@@ -214,7 +218,9 @@ toBackendModule (Module mod) env = do
 
 type WithDeps = Tuple (Set (Qualified Ident))
 
-toBackendTopLevelBindingGroups :: Array (Bind Ann) -> ConvertM (Accum ConvertEnv (Array (BackendBindingGroup Ident (WithDeps NeutralExpr))))
+toBackendTopLevelBindingGroups
+  :: Array (Bind Ann)
+  -> ConvertM (Accum ConvertEnv (Array (BackendBindingGroup Ident (WithDeps NeutralExpr))))
 toBackendTopLevelBindingGroups binds env = do
   let result = mapAccumL toBackendTopLevelBindingGroup env binds
   result
@@ -404,71 +410,98 @@ intro ident lvl f env = f
 currentLevel :: ConvertM Level
 currentLevel env = Level env.currentLevel
 
+-- TODO add dynamic import here
 toBackendExpr :: Expr Ann -> ConvertM BackendExpr
-toBackendExpr = case _ of
-  ExprVar _ qi -> do
-    { currentModule, toLevel } <- ask
-    case qi of
-      Qualified Nothing ident | Just lvl <- Map.lookup ident toLevel ->
-        buildM (Local (Just ident) lvl)
-      Qualified (Just mn) ident | mn == currentModule, Just lvl <- Map.lookup ident toLevel ->
-        buildM (Local (Just ident) lvl)
-      Qualified (Just (ModuleName "Prim")) (Ident "undefined") ->
-        buildM PrimUndefined
-      Qualified Nothing ident ->
-        buildM (Var (Qualified (Just currentModule) ident))
-      _ ->
-        buildM (Var qi)
-  ExprLit _ lit ->
-    buildM <<< Lit =<< traverse toBackendExpr lit
-  ExprConstructor _ ty name fields -> do
-    { dataTypes } <- ask
-    let
-      ct = case Map.lookup ty dataTypes of
-        Just { constructors } | Map.size constructors == 1 -> ProductType
-        _ -> SumType
-    buildM (CtorDef ct ty name fields)
-  ExprAccessor _ a field ->
-    buildM <<< flip Accessor (GetProp field) =<< toBackendExpr a
-  ExprUpdate _ a bs ->
-    join $ (\x y -> buildM (Update x y))
-      <$> toBackendExpr a
-      <*> traverse (traverse toBackendExpr) bs
-  ExprAbs _ arg body -> do
-    lvl <- currentLevel
-    make $ Abs (NonEmptyArray.singleton (Tuple (Just arg) lvl)) (intro [ arg ] lvl (toBackendExpr body))
-  ExprApp _ a b
-    | ExprVar (Ann { meta: Just IsNewtype }) id <- a -> do
-        toBackendExpr b
-    | otherwise ->
-        make $ App (toBackendExpr a) (NonEmptyArray.singleton (toBackendExpr b))
-  ExprLet _ binds body ->
-    foldr go (toBackendExpr body) binds
-    where
-    go bind' next = case bind' of
-      NonRec (Binding _ ident expr) ->
-        makeLet (Just ident) (toBackendExpr expr) \_ -> next
-      Rec bindings | Just bindings' <- NonEmptyArray.fromArray bindings -> do
-        lvl <- currentLevel
-        let idents = (\(Binding _ ident _) -> ident) <$> bindings'
-        join $ (\x y -> buildM (LetRec lvl x y))
-          <$> intro idents lvl (traverse toBackendBinding bindings')
-          <*> intro idents lvl next
-      Rec _ ->
-        unsafeCrashWith "CoreFn empty Rec binding group"
-  ExprCase _ exprs alts ->
-    foldr
-      ( \expr next idents ->
-          makeLet Nothing (toBackendExpr expr) \tmp ->
-            next (Array.snoc idents tmp)
-      )
-      ( \idents ->
-          toInitialCaseRows idents alts \caseRows ->
-            buildCaseTreeFromRows caseRows
-      )
-      exprs
-      []
+toBackendExpr =
+  case _ of
+    ExprVar _ qi -> do
+      { currentModule, toLevel } <- ask
+      case qi of
+        Qualified Nothing ident | Just lvl <- Map.lookup ident toLevel ->
+          buildM (Local (Just ident) lvl)
+        Qualified (Just mn) ident | mn == currentModule, Just lvl <- Map.lookup ident toLevel ->
+          buildM (Local (Just ident) lvl)
+        Qualified (Just (ModuleName "Prim")) (Ident "undefined") ->
+          buildM PrimUndefined
+        Qualified Nothing ident ->
+          buildM (Var (Qualified (Just currentModule) ident))
+        _ ->
+          buildM (Var qi)
+    ExprLit _ lit ->
+      buildM <<< Lit =<< traverse toBackendExpr lit
+    ExprConstructor _ ty name fields -> do
+      { dataTypes } <- ask
+      let
+        ct = case Map.lookup ty dataTypes of
+          Just { constructors } | Map.size constructors == 1 -> ProductType
+          _ -> SumType
+      buildM (CtorDef ct ty name fields)
+    ExprAccessor _ a field ->
+      buildM <<< flip Accessor (GetProp field) =<< toBackendExpr a
+    ExprUpdate _ a bs ->
+      join $ (\x y -> buildM (Update x y))
+        <$> toBackendExpr a
+        <*> traverse (traverse toBackendExpr) bs
+    ExprAbs _ arg body -> do
+      lvl <- currentLevel
+      make $ Abs (NonEmptyArray.singleton (Tuple (Just arg) lvl)) (intro [ arg ] lvl (toBackendExpr body))
+    ExprApp _ a b
+      | ExprVar (Ann { meta: Just IsNewtype }) id <- a -> do
+          toBackendExpr b
+      | otherwise -> do
+          dynamicImport <- getDynamicImport a b
+          case dynamicImport of
+            Just { moduleName, ident } -> do
+              make $ DynamicImport moduleName ident
+            Nothing -> do
+              make $ App (toBackendExpr a) (NonEmptyArray.singleton (toBackendExpr b))
+    ExprLet _ binds body ->
+      foldr go (toBackendExpr body) binds
+      where
+      go bind' next = case bind' of
+        NonRec (Binding _ ident expr) ->
+          makeLet (Just ident) (toBackendExpr expr) \_ -> next
+        Rec bindings | Just bindings' <- NonEmptyArray.fromArray bindings -> do
+          lvl <- currentLevel
+          let idents = (\(Binding _ ident _) -> ident) <$> bindings'
+          join $ (\x y -> buildM (LetRec lvl x y))
+            <$> intro idents lvl (traverse toBackendBinding bindings')
+            <*> intro idents lvl next
+        Rec _ ->
+          unsafeCrashWith "CoreFn empty Rec binding group"
+    ExprCase _ exprs alts ->
+      foldr
+        ( \expr next idents ->
+            makeLet Nothing (toBackendExpr expr) \tmp ->
+              next (Array.snoc idents tmp)
+        )
+        ( \idents ->
+            toInitialCaseRows idents alts \caseRows ->
+              buildCaseTreeFromRows caseRows
+        )
+        exprs
+        []
   where
+  getDynamicImport :: Expr Ann -> Expr Ann -> ConvertM (Maybe { moduleName :: ModuleName, ident :: Ident })
+  getDynamicImport a b = do
+    isDynamicImport <- getIsDynamicImport a
+    if isDynamicImport then
+      case b of
+        ExprVar _ qi -> do
+          case qi of
+            Qualified (Just moduleName) ident -> pure $ Just { moduleName, ident }
+            _ -> pure Nothing
+        _ -> pure Nothing
+    else
+      pure Nothing
+
+  getIsDynamicImport :: Expr Ann -> ConvertM Boolean
+  getIsDynamicImport = case _ of
+    ExprVar _ id -> do
+      { directives } <- ask
+      pure $ (Map.lookup (EvalExtern id) directives >>= Map.lookup InlineRef) == Just DynamicImportDir
+    _ -> pure false
+
   toInitialCaseRows :: Array Level -> Array (CaseAlternative Ann) -> (Array CaseRow -> ConvertM BackendExpr) -> ConvertM BackendExpr
   toInitialCaseRows idents alts useCaseRowsCb =
     foldr

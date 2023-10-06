@@ -1,6 +1,6 @@
 -- @inline dynamicImport never
 -- @inline export dynamicImport never
--- @dynamic import dynamicImport
+-- @dynamic-import export dynamicImport
 
 module DynamicImport
   ( dynamicImport

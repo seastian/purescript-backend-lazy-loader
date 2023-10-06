@@ -3,8 +3,10 @@ module PureScript.Backend.Optimizer.Syntax where
 import Prelude
 
 import Data.Array.NonEmpty (NonEmptyArray)
+import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype)
+import Data.Show.Generic (genericShow)
 import Data.Traversable (class Foldable, class Traversable, foldMap, foldlDefault, foldrDefault, sequenceDefault, traverse)
 import Data.Tuple (Tuple)
 import PureScript.Backend.Optimizer.CoreFn (ConstructorType, Ident(..), Literal(..), ModuleName(..), Prop, ProperName, Qualified)
@@ -40,6 +42,9 @@ newtype Level = Level Int
 derive newtype instance Eq Level
 derive newtype instance Ord Level
 derive instance Newtype Level _
+derive instance Generic Level _
+instance Show Level where
+  show = genericShow
 
 data Pair a = Pair a a
 

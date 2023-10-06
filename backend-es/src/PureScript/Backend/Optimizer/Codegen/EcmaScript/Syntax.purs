@@ -483,9 +483,8 @@ print opts syn = case syn of
     Tuple EsPrecAtom $ Dodo.text "undefined"
   EsDynamicImport moduleName valueName ->
     Tuple EsPrecCall $
-      esApp (Dodo.text "$runtime.dynamicImport")
+       esApp (Dodo.text "import")
         [ esString moduleName
-        , esString valueName
         ]
 
 printEsBinaryOp :: forall a. PrintOptions -> EsBinaryFixity -> EsExpr -> EsExpr -> Tuple EsPrec (Dodo.Doc a)

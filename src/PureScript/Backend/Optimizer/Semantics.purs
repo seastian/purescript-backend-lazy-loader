@@ -10,6 +10,7 @@ import Data.Either (Either(..))
 import Data.Foldable (class Foldable, and, foldMap, foldl, foldr, or)
 import Data.Foldable as Foldable
 import Data.Foldable as Tuple
+import Data.Generic.Rep (class Generic)
 import Data.Int.Bits (complement, shl, shr, xor, zshr, (.&.), (.|.))
 import Data.Lazy (Lazy, defer, force)
 import Data.List as List
@@ -19,6 +20,7 @@ import Data.Maybe (Maybe(..))
 import Data.Monoid (power)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Set as Set
+import Data.Show.Generic (genericShow)
 import Data.String as String
 import Data.Tuple (Tuple(..), fst, snd)
 import Partial.Unsafe (unsafeCrashWith)
@@ -147,7 +149,9 @@ data EvalRef
 
 derive instance Eq EvalRef
 derive instance Ord EvalRef
-
+derive instance Generic EvalRef _
+instance Show EvalRef where
+  show = genericShow
 data InlineAccessor
   = InlineProp String
   | InlineSpineProp String
@@ -155,13 +159,19 @@ data InlineAccessor
 
 derive instance Eq InlineAccessor
 derive instance Ord InlineAccessor
+derive instance Generic InlineAccessor _
+instance Show InlineAccessor where
+  show = genericShow
 
 data InlineDirective
   = InlineDefault
   | InlineNever
   | InlineAlways
   | InlineArity Int
-
+  | DynamicImportDir
+  
+derive instance Eq InlineDirective
+derive instance Ord InlineDirective
 type InlineDirectiveMap = Map EvalRef (Map InlineAccessor InlineDirective)
 
 newtype Env = Env
@@ -287,7 +297,7 @@ instance Eval f => Eval (BackendSyntax f) where
       NeutCtorDef (Qualified (Just (unwrap env).currentModule) tag) ct ty tag fields
     CtorSaturated qual ct ty tag fields ->
       guardFailOver snd (map (eval env) <$> fields) $ NeutData qual ct ty tag
-    DynamicImport mod val -> 
+    DynamicImport mod val ->
       SemDynamicImport mod val
 
 instance Eval BackendExpr where

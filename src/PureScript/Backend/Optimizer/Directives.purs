@@ -49,8 +49,7 @@ type DirectiveHeaderResult =
   { errors :: Array (Tuple String PositionedError)
   , locals :: InlineDirectiveMap
   , exports :: InlineDirectiveMap
-  , dynamicImports :: Set String
-
+  -- , dynamicImports :: Set String
   }
 
 parseDirectiveHeader :: ModuleName -> Array Comment -> DirectiveHeaderResult
@@ -58,45 +57,59 @@ parseDirectiveHeader moduleName = foldl go
   { errors: []
   , locals: Map.empty
   , exports: Map.empty
-  , dynamicImports: Set.empty
+  -- , dynamicImports: Set.empty
   }
   where
-  go { errors, locals, exports, dynamicImports } = case _ of
+  go { errors, locals, exports } = case _ of
     LineComment str
-      | Just line <- String.stripPrefix (Pattern "@inline") $ String.trim str -> do
-          let line' = String.trim line -- Trim again for leading space, makes errors better.
-          case runParser (lex line') directiveParser of
-            Left err ->
-              { errors: Array.snoc errors (Tuple line' err)
-              , locals
-              , exports
-              , dynamicImports
-              }
-            Right (Tuple (Left (Tuple key (Tuple acc val))) _) ->
-              { errors
-              , locals
-              , exports: insertDirective key acc val exports
-              , dynamicImports
-              }
-            Right (Tuple (Right (Tuple key (Tuple acc val))) _) ->
-              { errors
-              , locals: insertDirective key acc val locals
-              , exports
-              , dynamicImports
-              }
-      | Just line <- String.stripPrefix (Pattern "@dynamic import") $ String.trim str -> do
-          let line' = String.trim line
-          { errors
-          , locals
-          , exports
-          , dynamicImports: Set.insert line' dynamicImports
-          }
+      | Just line <- String.stripPrefix (Pattern "@inline") $ String.trim str ->
+          do
+            let line' = String.trim line -- Trim again for leading space, makes errors better.
+            case runParser (lex line') directiveParser of
+              Left err ->
+                { errors: Array.snoc errors (Tuple line' err)
+                , locals
+                , exports
+                }
+              Right (Tuple (Left (Tuple key (Tuple acc val))) _) ->
+                { errors
+                , locals
+                , exports: insertDirective key acc val exports
+                }
+              Right (Tuple (Right (Tuple key (Tuple acc val))) _) ->
+                { errors
+                , locals: insertDirective key acc val locals
+                , exports
+                }
+          where
+          directiveParser =
+            Left <$> parseDirectiveExport moduleName <|> Right <$> parseDirective
+
+      | Just line <- String.stripPrefix (Pattern "@dynamic-import") $ String.trim str ->
+          do
+            let line' = String.trim line -- Trim again for leading space, makes errors better.
+            case runParser (lex line') directiveParser of
+              Left err ->
+                { errors: Array.snoc errors (Tuple line' err)
+                , locals
+                , exports
+                }
+              Right (Tuple (Left (Tuple key (Tuple acc val))) _) ->
+                { errors
+                , locals
+                , exports: insertDirective key acc val exports
+                }
+              Right (Tuple (Right (Tuple key (Tuple acc val))) _) ->
+                { errors
+                , locals: insertDirective key acc val locals
+                , exports
+                }
+          where
+          directiveParser =
+            Left <$> parseDynamicImportDirectiveExport moduleName <|> Right <$> parseDynamicImportDirective
 
     _ ->
-      { errors, locals, exports, dynamicImports }
-
-  directiveParser =
-    Left <$> parseDirectiveExport moduleName <|> Right <$> parseDirective
+      { errors, locals, exports }
 
 parseDirectiveLine :: String -> Either PositionedError (Maybe (Tuple EvalRef (Tuple InlineAccessor InlineDirective)))
 parseDirectiveLine line = fst <$> runParser (lex line) parseDirectiveMaybe
@@ -121,6 +134,23 @@ parseDirective =
       accessor <- parseInlineAccessor
       directive <- parseInlineDirective
       in Tuple (EvalExtern qual) (Tuple accessor directive)
+  ) <* eof
+  
+parseDynamicImportDirectiveExport :: ModuleName -> Parser (Tuple EvalRef (Tuple InlineAccessor InlineDirective))
+parseDynamicImportDirectiveExport moduleName =
+  ( ado
+      keyword "export"
+      ident <- unqualified
+      accessor <- parseInlineAccessor
+      in Tuple (EvalExtern (Qualified (Just moduleName) ident)) (Tuple accessor DynamicImportDir)
+  ) <* eof
+
+parseDynamicImportDirective :: Parser (Tuple EvalRef (Tuple InlineAccessor InlineDirective))
+parseDynamicImportDirective =
+  ( ado
+      qual <- qualified
+      accessor <- parseInlineAccessor
+      in Tuple (EvalExtern qual) (Tuple accessor DynamicImportDir)
   ) <* eof
 
 parseInlineAccessor :: Parser InlineAccessor
