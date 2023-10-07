@@ -105,10 +105,9 @@ import Prelude
 import Control.Alternative (guard, (<|>))
 import Control.Monad.RWS (ask)
 import Data.Array as Array
-import Data.Array.NonEmpty (NonEmptyArray, findMap)
+import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NonEmptyArray
-import Data.Bifunctor (lmap)
-import Data.Foldable (foldMap, foldl)
+import Data.Foldable (findMap, foldMap, foldl)
 import Data.FoldableWithIndex (foldMapWithIndex, foldlWithIndex, foldrWithIndex)
 import Data.Function (on)
 import Data.FunctorWithIndex (mapWithIndex)
@@ -125,19 +124,17 @@ import Data.Set as Set
 import Data.Traversable (class Foldable, Accum, foldr, for, mapAccumL, mapAccumR, sequence, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), fst, snd)
-import Debug (spy, spyWith, traceM)
-import Foreign.Object (Object)
+import Debug (spy, traceM)
 import Foreign.Object as Object
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import PureScript.Backend.Optimizer.Analysis (BackendAnalysis)
-import PureScript.Backend.Optimizer.CoreFn (Ann(..), Bind(..), Binder(..), Binding(..), CaseAlternative(..), CaseGuard(..), Comment, ConstructorType(..), Expr(..), Guard(..), Ident(..), Literal(..), Meta(..), Module(..), ModuleName(..), ProperName, Qualified(..), ReExport, exprAnn, findProp, propKey, propValue, qualifiedModuleName, unQualified)
+import PureScript.Backend.Optimizer.CoreFn (Ann(..), Bind(..), Binder(..), Binding(..), CaseAlternative(..), CaseGuard(..), Comment, ConstructorType(..), Expr(..), Guard(..), Ident(..), Literal(..), Meta(..), Module(..), ModuleName(..), ProperName, Qualified(..), ReExport, findProp, propKey, propValue, qualifiedModuleName, unQualified)
 import PureScript.Backend.Optimizer.Directives (DirectiveHeaderResult, parseDirectiveHeader)
 import PureScript.Backend.Optimizer.Semantics (BackendExpr(..), BackendSemantics, Ctx, DataTypeMeta, DirectiveMap, Env(..), EvalRef(..), ExternImpl(..), ExternSpine, ImportDirective(..), InlineAccessor(..), InlineDirective(..), NeutralExpr(..), build, evalExternFromImpl, evalExternRefFromImpl, freeze, onInline, optimize)
 import PureScript.Backend.Optimizer.Semantics.Foreign (ForeignEval)
 import PureScript.Backend.Optimizer.Syntax (BackendAccessor(..), BackendOperator(..), BackendOperator1(..), BackendOperator2(..), BackendOperatorOrd(..), BackendSyntax(..), Level(..), Pair(..))
 import PureScript.Backend.Optimizer.Utils (foldl1Array)
 import Safe.Coerce (coerce)
-import Unsafe.Coerce (unsafeCoerce)
 
 type BackendBindingGroup a b =
   { recursive :: Boolean
@@ -342,27 +339,32 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
   }
   where
   replaceDynamicImports :: NeutralExpr -> NeutralExpr
-  replaceDynamicImports ne = replaceDynamicImportsExpr maxDepth ne
+  replaceDynamicImports ne = replaceDynamicImportsExpr maxDepth $ spy (show env.currentModule) ne
 
-  maxDepth = 8
+  maxDepth = 32
 
   replaceDynamicImportsExpr :: Int -> NeutralExpr -> NeutralExpr
   replaceDynamicImportsExpr 0 e = e
-  replaceDynamicImportsExpr d (NeutralExpr expr) = NeutralExpr $ expr
-    <#> case _ of
-      NeutralExpr (App (NeutralExpr (Var qIdent)) b)
+  replaceDynamicImportsExpr d ne = case ne of 
+    NeutralExpr (App (NeutralExpr (Var qIdent)) b)
         | Just DynamicImportDir <- getExprDir env qIdent
-        , Just { moduleName, exprIdent } <- getIdentQualified b ->
+        , Just { moduleName, exprIdent } <- getArrIdentQualified b ->
             NeutralExpr $ DynamicImport moduleName exprIdent
-      e -> replaceDynamicImportsExpr (d - 1) $ e
+
+    NeutralExpr expr -> NeutralExpr $ map (replaceDynamicImportsExpr (d - 1)) expr
 
   getExprDir :: ConvertEnv -> _ -> (Maybe ImportDirective)
   getExprDir { directives: { imports } } id =
     Map.lookup (EvalExtern id) imports >>= Map.lookup InlineRef
 
-  getIdentQualified :: NonEmptyArray NeutralExpr -> Maybe { moduleName :: ModuleName, exprIdent :: Ident }
-  getIdentQualified = findMap case _ of 
-    NeutralExpr (Var (Qualified (Just moduleName) exprIdent)) -> Just { moduleName, exprIdent } 
+  getArrIdentQualified :: NonEmptyArray NeutralExpr -> Maybe { moduleName :: ModuleName, exprIdent :: Ident }
+  getArrIdentQualified = findMap getIdentQualified
+
+  getIdentQualified :: NeutralExpr -> Maybe { moduleName :: ModuleName, exprIdent :: Ident }
+  getIdentQualified = unwrap >>> case _ of 
+    Var (Qualified (Just moduleName) exprIdent) -> Just { moduleName, exprIdent } 
+    Abs _ ne -> getIdentQualified ne
+    UncurriedApp ne _ -> getIdentQualified ne
     _ -> Nothing
 
 inferTransitiveDirective :: DirectiveMap -> ExternImpl -> BackendExpr -> Expr Ann -> Maybe (Map InlineAccessor InlineDirective)
