@@ -14,10 +14,7 @@ import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Foldable (foldl)
 import Data.FoldableWithIndex (foldlWithIndex)
-import Data.Map as Map
 import Data.Maybe (Maybe(..))
-import Data.Set (Set)
-import Data.Set as Set
 import Data.String (Pattern(..))
 import Data.String as String
 import Data.Tuple (Tuple(..), fst)
@@ -72,13 +69,6 @@ parseDirectiveHeader moduleName = foldl go
           directiveParser =
             Left <$> parseDynamicImportDirectiveExport DynamicImportDir moduleName
               <|> Right <$> parseDynamicImportDirective DynamicImportDir
-
-      | Just line <- String.stripPrefix (Pattern "@abstraction-dynamic-import") $ String.trim str ->
-          collectDirectives insertImportDirective directiveParser line
-          where
-          directiveParser =
-            Left <$> parseDynamicImportDirectiveExport DynamicImportAbstraction moduleName
-              <|> Right <$> parseDynamicImportDirective DynamicImportAbstraction
 
     _ ->
       { errors, locals, exports }

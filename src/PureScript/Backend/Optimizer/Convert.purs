@@ -124,8 +124,6 @@ import Data.Set as Set
 import Data.Traversable (class Foldable, Accum, foldr, for, mapAccumL, mapAccumR, sequence, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), fst, snd)
-import Debug (spy, traceM)
-import Foreign.Object as Object
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import PureScript.Backend.Optimizer.Analysis (BackendAnalysis)
 import PureScript.Backend.Optimizer.CoreFn (Ann(..), Bind(..), Binder(..), Binding(..), CaseAlternative(..), CaseGuard(..), Comment, ConstructorType(..), Expr(..), Guard(..), Ident(..), Literal(..), Meta(..), Module(..), ModuleName(..), ProperName, Qualified(..), ReExport, findProp, propKey, propValue, qualifiedModuleName, unQualified)
@@ -355,7 +353,7 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
   getArrIdentQualified = findMap getIdentQualified
 
   getIdentQualified :: NeutralExpr -> Maybe { moduleName :: ModuleName, exprIdent :: Ident }
-  getIdentQualified = unwrap >>> spy "expr" >>>  case _ of
+  getIdentQualified = unwrap >>> case _ of
     Var (Qualified (Just moduleName) exprIdent) -> Just { moduleName, exprIdent }
     Abs _ ne -> getIdentQualified ne
     UncurriedApp ne _ -> getIdentQualified ne

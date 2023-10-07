@@ -173,7 +173,6 @@ derive instance Eq InlineDirective
 derive instance Ord InlineDirective
 data ImportDirective
   = DynamicImportDir
-  | DynamicImportAbstraction
 
 derive instance Eq ImportDirective
 derive instance Ord ImportDirective
