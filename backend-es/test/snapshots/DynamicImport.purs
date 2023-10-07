@@ -1,10 +1,5 @@
--- @inline dynamicImport never
--- @inline export dynamicImport never
--- @inline dynamicImportAff always
 -- @inline export dynamicImportAff always
--- @inline dynamicImportM always
 -- @inline export dynamicImportM always
--- @dynamic-import dynamicImport
 -- @dynamic-import export dynamicImport
 
 module DynamicImport

@@ -64,8 +64,11 @@ parseDirectiveHeader moduleName = foldl go
             Left <$> parseDirectiveExport moduleName <|> Right <$> parseDirective
 
       | Just line <- String.stripPrefix (Pattern "@dynamic-import") $ String.trim str ->
-          collectDirectives insertImportDirective directiveParser line
+          collectDirectives insertImportAndInlineNever directiveParser line
           where
+          insertImportAndInlineNever ref acc dir =
+            insertImportDirective ref acc dir
+              >>> insertDirective ref acc InlineNever
           directiveParser =
             Left <$> parseDynamicImportDirectiveExport DynamicImportDir moduleName
               <|> Right <$> parseDynamicImportDirective DynamicImportDir
