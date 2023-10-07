@@ -124,7 +124,7 @@ import Data.Set as Set
 import Data.Traversable (class Foldable, Accum, foldr, for, mapAccumL, mapAccumR, sequence, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), fst, snd)
-import Debug (spy, traceM)
+import Debug (traceM)
 import Foreign.Object as Object
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import PureScript.Backend.Optimizer.Analysis (BackendAnalysis)
@@ -339,7 +339,7 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
   }
   where
   replaceDynamicImports :: NeutralExpr -> NeutralExpr
-  replaceDynamicImports ne = replaceDynamicImportsExpr maxDepth $ spy (show env.currentModule) ne
+  replaceDynamicImports ne = replaceDynamicImportsExpr maxDepth ne
 
   maxDepth = 32
 
@@ -586,7 +586,6 @@ toBackendExpr =
           _ -> pure Nothing
 
       Just DynamicImportAbstraction -> do
-        traceM "DynamicImportAbstraction"
         { implementations, directives: { imports, inline } } <- ask
 
         let
@@ -601,13 +600,7 @@ toBackendExpr =
           toObj = (Object.fromFoldable :: Array _ -> _) <<< map (\(Tuple k v) -> Tuple (show k) v) <<< Map.toUnfoldable
         -- Just <$> ?d a
 
-        traceM
-          { a
-          , b
-          , neutrExprMb
-          , imports: toObj imports # map toObj
-          , inline: toObj inline # map toObj
-          }
+
 
         case neutrExprMb of
           -- Just ne@(NeutralExpr (Abs arg body)) -> do
