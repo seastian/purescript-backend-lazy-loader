@@ -124,7 +124,7 @@ import Data.Set as Set
 import Data.Traversable (class Foldable, Accum, foldr, for, mapAccumL, mapAccumR, sequence, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), fst, snd)
-import Debug (traceM)
+import Debug (spy, traceM)
 import Foreign.Object as Object
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import PureScript.Backend.Optimizer.Analysis (BackendAnalysis)
@@ -338,20 +338,14 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
   , value: Tuple ident (Tuple (unwrap (fst impl)).deps $ replaceDynamicImports expr')
   }
   where
-  replaceDynamicImports :: NeutralExpr -> NeutralExpr
-  replaceDynamicImports ne = replaceDynamicImportsExpr maxDepth ne
-
-  maxDepth = 32
-
-  replaceDynamicImportsExpr :: Int -> NeutralExpr -> NeutralExpr
-  replaceDynamicImportsExpr 0 e = e
-  replaceDynamicImportsExpr d ne = case ne of 
+  replaceDynamicImports ::  NeutralExpr -> NeutralExpr
+  replaceDynamicImports ne = case ne of
     NeutralExpr (App (NeutralExpr (Var qIdent)) b)
-        | Just DynamicImportDir <- getExprDir env qIdent
-        , Just { moduleName, exprIdent } <- getArrIdentQualified b ->
-            NeutralExpr $ DynamicImport moduleName exprIdent
+      | Just DynamicImportDir <- getExprDir env qIdent
+      , Just { moduleName, exprIdent } <- getArrIdentQualified b ->
+          NeutralExpr $ DynamicImport moduleName exprIdent
 
-    NeutralExpr expr -> NeutralExpr $ map (replaceDynamicImportsExpr (d - 1)) expr
+    NeutralExpr expr -> NeutralExpr $ map replaceDynamicImports expr
 
   getExprDir :: ConvertEnv -> _ -> (Maybe ImportDirective)
   getExprDir { directives: { imports } } id =
@@ -361,8 +355,8 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
   getArrIdentQualified = findMap getIdentQualified
 
   getIdentQualified :: NeutralExpr -> Maybe { moduleName :: ModuleName, exprIdent :: Ident }
-  getIdentQualified = unwrap >>> case _ of 
-    Var (Qualified (Just moduleName) exprIdent) -> Just { moduleName, exprIdent } 
+  getIdentQualified = unwrap >>> spy "expr" >>>  case _ of
+    Var (Qualified (Just moduleName) exprIdent) -> Just { moduleName, exprIdent }
     Abs _ ne -> getIdentQualified ne
     UncurriedApp ne _ -> getIdentQualified ne
     _ -> Nothing
@@ -500,7 +494,6 @@ intro ident lvl f env = f
 currentLevel :: ConvertM Level
 currentLevel env = Level env.currentLevel
 
--- TODO add dynamic import here
 toBackendExpr :: Expr Ann -> ConvertM BackendExpr
 toBackendExpr =
   case _ of
@@ -539,11 +532,7 @@ toBackendExpr =
       | ExprVar (Ann { meta: Just IsNewtype }) id <- a -> do
           toBackendExpr b
       | otherwise -> do
-          dynamicImport <- getDynamicImport a b
-          case dynamicImport of
-            Just importExpr -> pure importExpr
-            Nothing -> do
-              make $ App (toBackendExpr a) (NonEmptyArray.singleton (toBackendExpr b))
+          make $ App (toBackendExpr a) (NonEmptyArray.singleton (toBackendExpr b))
     ExprLet _ binds body ->
       foldr go (toBackendExpr body) binds
       where
@@ -571,88 +560,6 @@ toBackendExpr =
         exprs
         []
   where
-  getDynamicImport :: Expr Ann -> Expr Ann -> ConvertM (Maybe BackendExpr)
-  getDynamicImport a b = do
-    dir <- getExprDir a
-    case dir of
-      Just DynamicImportDir ->
-        case b of
-          ExprVar meta qi -> do
-            case qi of
-              Qualified (Just moduleName) ident ->
-                Just <$> (make $ DynamicImport moduleName ident)
-              _ -> do
-                pure Nothing
-          _ -> pure Nothing
-
-      Just DynamicImportAbstraction -> do
-        { implementations, directives: { imports, inline } } <- ask
-
-        let
-          neutrExprMb :: Maybe NeutralExpr
-          neutrExprMb =
-            getExprIdent a
-              >>= flip Map.lookup implementations
-              <#> snd
-              >>= fromExternImpl
-
-          toObj :: forall k v. Show k => Map k v -> Object.Object v
-          toObj = (Object.fromFoldable :: Array _ -> _) <<< map (\(Tuple k v) -> Tuple (show k) v) <<< Map.toUnfoldable
-        -- Just <$> ?d a
-
-
-
-        case neutrExprMb of
-          -- Just ne@(NeutralExpr (Abs arg body)) -> do
-          --   pure $ Just $ neutralToBE ne
-          -- ExprSyntax mempty $ Abs args $ ?neutrExprMb a'
-          _ -> pure Nothing
-
-      -- case b of 
-
-      --   ExprVar meta qi -> do
-      --     case qi of
-      --       Qualified (Just moduleName) ident ->
-      --         pure $ Just $ ExprDynamicImport meta moduleName ident
-      --       _ -> do
-      --         traceM { meta, qi }
-      --         pure Nothing
-      --   -- _ -> pure Nothing
-
-      _ -> pure Nothing
-
-  neutralToBE :: NeutralExpr -> BackendExpr
-  neutralToBE (NeutralExpr expr) = ExprSyntax mempty $ map neutralToBE expr
-
-  -- isDynamicImport <- getIsDynamicImport a
-  -- if isDynamicImport then do
-  --   traceM { b }
-  --   case b of
-  -- ExprVar meta qi -> do
-  --   case qi of
-  --     Qualified (Just moduleName) ident ->
-  --       Just <$> (make $ DynamicImport moduleName ident)
-  --     _ -> do
-  --       traceM { meta, qi }
-  --       pure Nothing
-  --     other -> do
-  --       traceM { other }
-  --       pure Nothing
-  -- else
-  --   pure Nothing
-  getExprDir :: Expr Ann -> ConvertM (Maybe ImportDirective)
-  getExprDir = case _ of
-    ExprVar (Ann { span }) id -> do
-      { directives: { imports } } <- ask
-      pure $ Map.lookup (EvalExtern id) imports >>= Map.lookup InlineRef
-    _ -> pure Nothing
-
-  getExprIdent :: Expr Ann -> Maybe (Qualified Ident)
-  getExprIdent = case _ of
-    ExprVar _ qi -> Just qi
-    _ -> Nothing
-
-  -- getNeutralExpr 
 
   toInitialCaseRows :: Array Level -> Array (CaseAlternative Ann) -> (Array CaseRow -> ConvertM BackendExpr) -> ConvertM BackendExpr
   toInitialCaseRows idents alts useCaseRowsCb =
