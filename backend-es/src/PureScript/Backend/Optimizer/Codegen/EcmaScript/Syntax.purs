@@ -40,7 +40,7 @@ import Data.Array.NonEmpty as NonEmptyArray
 import Data.Foldable (class Foldable, fold, foldMap, foldl, foldlDefault, foldr, foldrDefault)
 import Data.List as List
 import Data.Maybe (Maybe(..), fromMaybe, isJust)
-import Data.Newtype (class Newtype)
+import Data.Newtype (class Newtype, unwrap)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.String as String
@@ -48,7 +48,7 @@ import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..), fst, snd)
 import Dodo as Dodo
 import Dodo.Common as Dodo.Common
-import PureScript.Backend.Optimizer.Codegen.EcmaScript.Common (esAccessor, esApp, esAssign, esBoolean, esEscapeIdent, esEscapeProp, esEscapeSpecial, esIndex, esInt, esModuleName, esNumber, esString, esTernary, esThenAccessor, esThunk)
+import PureScript.Backend.Optimizer.Codegen.EcmaScript.Common (esAccessor, esApp, esAssign, esBoolean, esEscapeIdent, esEscapeProp, esEscapeSpecial, esIndex, esInt, esModuleName, esNumber, esString, esTernary, esThunk)
 import PureScript.Backend.Optimizer.CoreFn (Ident(..), ModuleName(..), Qualified(..))
 
 data EsModuleStatement a
@@ -91,7 +91,7 @@ data EsSyntax a
   | EsReturn (Maybe a)
   | EsContinue
   | EsUndefined
-  | EsDynamicImport String String
+  | EsDynamicImport ModuleName String (NonEmptyArray a)
 
 derive instance Functor EsSyntax
 
@@ -124,7 +124,7 @@ instance Foldable EsSyntax where
     EsReturn a -> foldMap f a
     EsContinue -> mempty
     EsUndefined -> mempty
-    EsDynamicImport _ _ -> mempty
+    EsDynamicImport _ _ a -> foldMap f a
 
 data EsArrayElement a
   = EsArrayValue a
@@ -481,12 +481,26 @@ print opts syn = case syn of
     Tuple EsPrecStatement $ Dodo.text "continue"
   EsUndefined ->
     Tuple EsPrecAtom $ Dodo.text "undefined"
-  EsDynamicImport moduleName valueName ->
+  EsDynamicImport moduleName _valueName body ->
     Tuple EsPrecCall
-      $ esThunk
-      $ esApp (Dodo.text "import")
-          [ esString ("../" <> moduleName <> "/index.js")
-          ] `esThenAccessor` valueName
+      $ printEsDynamicImport opts moduleName body
+
+
+printEsDynamicImport :: forall a. PrintOptions -> ModuleName -> NonEmptyArray EsExpr -> Dodo.Doc a
+printEsDynamicImport opts moduleName body = esThunk
+  $
+    ( esApp (Dodo.text "import")
+        [ esString ("../" <> unwrap moduleName <> "/index.js")
+        ]
+    )
+      <> Dodo.text ".then"
+      <> Dodo.Common.jsParens
+        ( printArrowFunction opts [ toEsIdent moduleName ] $
+            init
+              <> [ build $ EsReturn $ Just last ]
+        )
+  where
+  { init, last } = NonEmptyArray.unsnoc body
 
 printEsBinaryOp :: forall a. PrintOptions -> EsBinaryFixity -> EsExpr -> EsExpr -> Tuple EsPrec (Dodo.Doc a)
 printEsBinaryOp opts f1 (EsExpr _ lhs) (EsExpr _ rhs) =

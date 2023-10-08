@@ -345,7 +345,7 @@ analyze externAnalysis expr = case expr of
       $ analyzeDefault expr
   PrimUndefined ->
     analyzeDefault expr
-  DynamicImport _ _ ->
+  DynamicImport _ _ _ ->  -- TODO: Check if this is correct
     analyzeDefault expr
   Accessor hd acc ->
     case syntaxOf hd of

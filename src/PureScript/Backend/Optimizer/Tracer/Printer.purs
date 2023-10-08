@@ -284,7 +284,7 @@ printBackendSyntax = case _ of
     printBackendEffect backendEffect
   PrimUndefined ->
     primOp "" "undefined"
-  DynamicImport module' val ->
+  DynamicImport module' val _ ->
     Tuple PrecAtom $ fold
       [ (D.text $ "import(" <> coerce module' <> ")") -- TODO: This is different form Syntax.purs
       , printBackendAccessor $ GetProp $ coerce val

@@ -9,7 +9,7 @@ import Data.Newtype (class Newtype)
 import Data.Show.Generic (genericShow)
 import Data.Traversable (class Foldable, class Traversable, foldMap, foldlDefault, foldrDefault, sequenceDefault, traverse)
 import Data.Tuple (Tuple)
-import PureScript.Backend.Optimizer.CoreFn (ConstructorType, Ident(..), Literal(..), ModuleName(..), Prop, ProperName, Qualified)
+import PureScript.Backend.Optimizer.CoreFn (ConstructorType, Ident, Literal(..), ModuleName, Prop, ProperName, Qualified)
 
 data BackendSyntax a
   = Var (Qualified Ident)
@@ -35,7 +35,7 @@ data BackendSyntax a
   | PrimEffect (BackendEffect a)
   | PrimUndefined
   | Fail String
-  | DynamicImport ModuleName Ident
+  | DynamicImport ModuleName Ident (NonEmptyArray a)
 
 newtype Level = Level Int
 
@@ -156,7 +156,7 @@ instance Foldable BackendSyntax where
     PrimUndefined -> mempty
     CtorSaturated _ _ _ _ es -> foldMap (foldMap f) es
     CtorDef _ _ _ _ -> mempty
-    DynamicImport _ _ -> mempty
+    DynamicImport _ _ c -> foldMap f c
     Fail _ -> mempty
 
 instance Traversable BackendSyntax where
@@ -213,7 +213,7 @@ instance Traversable BackendSyntax where
       PrimEffect <$> traverse f a
     PrimUndefined ->
       pure PrimUndefined
-    DynamicImport a b -> pure (DynamicImport a b)
+    DynamicImport a b c -> DynamicImport a b <$> traverse f c
     Fail a ->
       pure (Fail a)
 

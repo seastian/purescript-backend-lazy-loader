@@ -1,13 +1,16 @@
+
 import * as Assert from "../Assert/index.js";
 import * as Control$dPromise from "../Control.Promise/index.js";
+import * as Data$dArray from "../Data.Array/index.js";
 import * as Data$dEq from "../Data.Eq/index.js";
 import * as Data$dList$dTypes from "../Data.List.Types/index.js";
 import * as Data$dShow from "../Data.Show/index.js";
+import * as DynamicImport from "../DynamicImport/index.js";
 import * as Effect$dAff from "../Effect.Aff/index.js";
 import * as Effect$dAff$dClass from "../Effect.Aff.Class/index.js";
 const lazyFromFoldable = dictMonadAff => dictFoldable => {
   const $0 = dictFoldable.foldr;
-  return dictMonadAff.liftAff(Effect$dAff._bind(Effect$dAff._liftEffect((() => import("../Data.Array/index.js").then((m) => m.fromFoldableImpl))))(Control$dPromise.toAff$p(Control$dPromise.coerce)));
+  return dictMonadAff.liftAff(Effect$dAff._bind(Effect$dAff._liftEffect(DynamicImport.dynamicImport($1 => Data$dArray.fromFoldableImpl($0, $1))))(Control$dPromise.toAff$p(Control$dPromise.coerce)));
 };
 const main = /* #__PURE__ */ (() => {
   const $0 = Effect$dAff._makeFiber(

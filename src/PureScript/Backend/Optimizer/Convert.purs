@@ -124,6 +124,7 @@ import Data.Set as Set
 import Data.Traversable (class Foldable, Accum, foldr, for, mapAccumL, mapAccumR, sequence, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), fst, snd)
+import Debug (spy)
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import PureScript.Backend.Optimizer.Analysis (BackendAnalysis)
 import PureScript.Backend.Optimizer.CoreFn (Ann(..), Bind(..), Binder(..), Binding(..), CaseAlternative(..), CaseGuard(..), Comment, ConstructorType(..), Expr(..), Guard(..), Ident(..), Literal(..), Meta(..), Module(..), ModuleName(..), ProperName, Qualified(..), ReExport, findProp, propKey, propValue, qualifiedModuleName, unQualified)
@@ -333,15 +334,15 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
             Nothing ->
               env.directives
       }
-  , value: Tuple ident (Tuple (unwrap (fst impl)).deps $ replaceDynamicImports expr')
+  , value: Tuple ident (Tuple (unwrap (fst impl)).deps $ replaceDynamicImports $ spy (show env.currentModule) expr')
   }
   where
-  replaceDynamicImports ::  NeutralExpr -> NeutralExpr
-  replaceDynamicImports ne = case ne of
+  replaceDynamicImports :: NeutralExpr -> NeutralExpr
+  replaceDynamicImports = case _ of
     NeutralExpr (App (NeutralExpr (Var qIdent)) b)
       | Just DynamicImportDir <- getExprDir env qIdent
       , Just { moduleName, exprIdent } <- getArrIdentQualified b ->
-          NeutralExpr $ DynamicImport moduleName exprIdent
+          NeutralExpr $ DynamicImport moduleName exprIdent b
 
     NeutralExpr expr -> NeutralExpr $ map replaceDynamicImports expr
 

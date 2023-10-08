@@ -63,7 +63,7 @@ data BackendSemantics
   | NeutUncurriedEffectApp BackendSemantics (Array BackendSemantics)
   | NeutPrimOp (BackendOperator BackendSemantics)
   | NeutPrimEffect (BackendEffect BackendSemantics)
-  | SemDynamicImport ModuleName Ident
+  | SemDynamicImport ModuleName Ident (NonEmptyArray BackendSemantics)
   | NeutPrimUndefined
 
 data SemConditional a = SemConditional (Lazy a) (Lazy a)
@@ -338,8 +338,8 @@ instance Eval f => Eval (BackendSyntax f) where
       NeutCtorDef (Qualified (Just (unwrap env).currentModule) tag) ct ty tag fields
     CtorSaturated qual ct ty tag fields ->
       guardFailOver snd (map (eval env) <$> fields) $ NeutData qual ct ty tag
-    DynamicImport mod val ->
-      SemDynamicImport mod val
+    DynamicImport mod val body ->
+      SemDynamicImport mod val (eval env <$> body)
 
 instance Eval BackendExpr where
   eval = go
@@ -1323,7 +1323,7 @@ quote = go
       build ctx PrimUndefined
     NeutFail err ->
       build ctx $ Fail err
-    SemDynamicImport mod val -> build ctx $ DynamicImport mod val
+    SemDynamicImport mod val body -> build ctx $ DynamicImport mod val (quote ctx <$> body)
 
 build :: Ctx -> BackendSyntax BackendExpr -> BackendExpr
 build ctx = case _ of

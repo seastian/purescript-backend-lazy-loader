@@ -14,9 +14,9 @@ module PureScript.Backend.Optimizer.Codegen.EcmaScript.Common
   , esNumber
   , esString
   , esTernary
-  , esThenAccessor
   , esThunk
-  ) where
+  )
+  where
 
 import Prelude
 
@@ -25,6 +25,7 @@ import Data.Array (fold)
 import Data.Array as Array
 import Data.Enum (fromEnum)
 import Data.Maybe (Maybe(..))
+import Data.Newtype (unwrap)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.String as String
@@ -226,8 +227,14 @@ esApp a bs =
   where
   args = Dodo.foldWithSeparator Dodo.Common.trailingComma bs
 
-esThenAccessor :: forall a. Dodo.Doc a -> String -> Dodo.Doc a
-esThenAccessor a prop = a <> Dodo.text ".then((m) => " <> esAccessor (Dodo.text "m") prop <> Dodo.text ")"
+-- Dodo.text "import("
+-- <> Dodo.text (esEscapeString (runModuleName mName))
+-- <> Dodo.text ")"
+-- <> Dodo.text ".then(("
+-- <> Dodo.text (esEscapeIdent (runModuleName mName))
+-- <> Dodo.text ") => "
+-- <> body
+-- <> Dodo.text ")"
 
 esThunk :: forall a. Dodo.Doc a -> Dodo.Doc a
 esThunk a = Dodo.text "(() => " <> a <> Dodo.text ")"
