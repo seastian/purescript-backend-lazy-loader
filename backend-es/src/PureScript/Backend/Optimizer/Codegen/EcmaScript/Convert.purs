@@ -25,7 +25,7 @@ import Data.Traversable (class Traversable, Accum, mapAccumL, traverse)
 import Data.Tuple (Tuple(..), fst, snd, uncurry)
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.Backend.Optimizer.Codegen.EcmaScript.Common (esEscapeIdent)
-import PureScript.Backend.Optimizer.Codegen.EcmaScript.Syntax (class ToEsIdent, EsArrayElement(..), EsBinaryOp(..), EsBindingPattern(..), EsExpr(..), EsIdent(..), EsObjectElement(..), EsRuntimeOp(..), EsSyntax(..), EsUnaryOp(..), build, esArrowFunction, esAssignIdent, esBinding, esCurriedFunction, esLazyBinding, printIdentString, toEsIdent, toEsIdentWith)
+import PureScript.Backend.Optimizer.Codegen.EcmaScript.Syntax (class ToEsIdent, EsAnalysis(..), EsArrayElement(..), EsBinaryOp(..), EsBindingPattern(..), EsExpr(..), EsIdent(..), EsObjectElement(..), EsRuntimeOp(..), EsSyntax(..), EsUnaryOp(..), build, esArrowFunction, esAssignIdent, esBinding, esCurriedFunction, esLazyBinding, printIdentString, toEsIdent, toEsIdentWith)
 import PureScript.Backend.Optimizer.Codegen.Tco (LocalRef, TcoAnalysis(..), TcoExpr(..), TcoPop, TcoRef(..), TcoRole, TcoScope, TcoScopeItem, TcoUsage(..), tcoAnalysisOf)
 import PureScript.Backend.Optimizer.Codegen.Tco as Tco
 import PureScript.Backend.Optimizer.Convert (BackendBindingGroup, BackendImplementations)
@@ -315,7 +315,12 @@ codegenExpr env@(CodegenEnv { currentModule, inlineApp }) tcoExpr@(TcoExpr _ exp
     codegenEffectBlock env tcoExpr
   EffectDefer _ ->
     codegenEffectBlock env tcoExpr
-  DynamicImport moduleName val body -> build $ EsDynamicImport moduleName (unwrap val) (codegenExpr env <$> body)
+  DynamicImport moduleName val body ->
+    let
+      EsExpr (EsAnalysis an) es = build
+        $ EsDynamicImport moduleName (unwrap val) (codegenExpr env <$> body)
+    in
+      EsExpr (EsAnalysis an { deps = Set.delete moduleName an.deps }) es
 
 codegenPureBlock :: CodegenEnv -> TcoExpr -> EsExpr
 codegenPureBlock env a = build $ EsCall (esArrowFunction [] (codegenBlockStatements pureMode env a)) []

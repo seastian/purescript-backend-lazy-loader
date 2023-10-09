@@ -59,6 +59,7 @@ buildModules options coreFnModules =
         }
       newImplementations =
         foldrWithIndex Map.insert implementations backendMod.implementations
+
     options.onCodegenModule (buildEnv { implementations = newImplementations }) coreFnModule' backendMod optimizationSteps
     pure
       { directives:

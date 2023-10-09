@@ -8,7 +8,7 @@ import Prelude
 
 import Control.Alternative (guard, (<|>))
 import Control.Monad.Error.Class (throwError)
-import Data.Argonaut (Json, JsonDecodeError(..), decodeJson, stringify)
+import Data.Argonaut (Json, JsonDecodeError(..), decodeJson)
 import Data.Argonaut.Decode.Decoders (decodeArray, decodeBoolean, decodeInt, decodeJObject, decodeNumber, decodeString, decodeTuple, getField, getFieldOptional')
 import Data.Array as Array
 import Data.Either (Either, note)
@@ -16,11 +16,9 @@ import Data.Foldable (intercalate)
 import Data.String.CodeUnits as SCU
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..), uncurry)
-import Debug (traceM)
 import Foreign.Object (Object)
 import Foreign.Object as Object
 import PureScript.Backend.Optimizer.CoreFn (Ann(..), Bind(..), Binder(..), Binding(..), CaseAlternative(..), CaseGuard(..), Comment(..), ConstructorType(..), Expr(..), Guard(..), Ident(..), Import(..), Literal(..), Meta(..), Module(..), ModuleName(..), Prop(..), ProperName(..), Qualified(..), ReExport(..), SourcePos, SourceSpan)
-import PureScript.Backend.Optimizer.Debug (spyWhen, traceWhen, traceWhenA)
 import Safe.Coerce (coerce)
 
 type JsonDecode = Either JsonDecodeError

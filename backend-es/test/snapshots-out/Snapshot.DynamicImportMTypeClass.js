@@ -7,7 +7,7 @@ import * as Effect$dAff from "../Effect.Aff/index.js";
 import * as Effect$dAff$dClass from "../Effect.Aff.Class/index.js";
 const lazyFromFoldable = dictMonadAff => dictFoldable => {
   const $0 = dictFoldable.foldr;
-  return dictMonadAff.liftAff(Effect$dAff._bind(Effect$dAff._liftEffect((() => import("../Data.Array/index.js").then((m) => m.fromFoldableImpl))))(Control$dPromise.toAff$p(Control$dPromise.coerce)));
+  return dictMonadAff.liftAff(Effect$dAff._bind(Effect$dAff._liftEffect((() => import("../Data.Array/index.js").then(Data$dArray => $1 => Data$dArray.fromFoldableImpl($0, $1)))))(Control$dPromise.toAff$p(Control$dPromise.coerce)));
 };
 const main = /* #__PURE__ */ (() => {
   const $0 = Effect$dAff._makeFiber(

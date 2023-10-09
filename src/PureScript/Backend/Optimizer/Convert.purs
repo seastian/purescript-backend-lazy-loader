@@ -334,7 +334,11 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
             Nothing ->
               env.directives
       }
-  , value: Tuple ident (Tuple (unwrap (fst impl)).deps $ replaceDynamicImports $ spy (show env.currentModule) expr')
+  , value: Tuple ident
+      ( Tuple (unwrap (fst impl)).deps
+          $ replaceDynamicImports
+          $ expr'
+      )
   }
   where
   replaceDynamicImports :: NeutralExpr -> NeutralExpr
