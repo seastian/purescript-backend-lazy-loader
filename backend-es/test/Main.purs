@@ -23,7 +23,6 @@ import Data.String as String
 import Data.String.CodeUnits as SCU
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), uncurry)
-import Debug (traceM)
 import Dodo as Dodo
 import Effect (Effect)
 import Effect.Aff (Aff, Error, attempt, launchAff_)
