@@ -22,7 +22,7 @@ main :: Effect Unit
 main = launchAff_ do
   fromFoldable <- lazyFromFoldable
   arr <- pure $ Array.reverse $ Array.fromFoldable [ 2, 1 ]
-  liftEffect $ assertEqual "DynamicImportMTypeClass/lazyFromFoldable"
+  liftEffect $ assertEqual "DynamicImportMixedImports/lazyFromFoldable"
     { expected: arr
     , actual: fromFoldable (1 : 2 : Nil)
     }
