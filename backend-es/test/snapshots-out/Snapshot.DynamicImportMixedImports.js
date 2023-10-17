@@ -17,7 +17,7 @@ const main = /* #__PURE__ */ (() => {
     Effect$dAff._bind(lazyFromFoldable(Effect$dAff$dClass.monadAffAff)(Data$dList$dTypes.foldableList))(fromFoldable1 => Effect$dAff._bind(Effect$dAff._pure(Data$dArray.reverse(Data$dArray.fromFoldableImpl(
       Data$dFoldable.foldrArray,
       [2, 1]
-    ))))(arr => Effect$dAff._liftEffect(Assert.assertEqual({eq: Data$dEq.eqArrayImpl(Data$dEq.eqIntImpl)})({show: Data$dShow.showArrayImpl(Data$dShow.showIntImpl)})("DynamicImportMTypeClass/lazyFromFoldable")({
+    ))))(arr => Effect$dAff._liftEffect(Assert.assertEqual({eq: Data$dEq.eqArrayImpl(Data$dEq.eqIntImpl)})({show: Data$dShow.showArrayImpl(Data$dShow.showIntImpl)})("DynamicImportMixedImports/lazyFromFoldable")({
       expected: arr,
       actual: fromFoldable1(Data$dList$dTypes.$List("Cons", 1, Data$dList$dTypes.$List("Cons", 2, Data$dList$dTypes.Nil)))
     }))))
