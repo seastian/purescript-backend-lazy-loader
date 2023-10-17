@@ -341,10 +341,8 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
       )
   }
   where
-  spy_ = if unwrap env.currentModule == "Snapshot.DynamicImportMultipleTypeClasses" then spy else \_ a -> a
-  
   replaceDynamicImports :: NeutralExpr -> NeutralExpr
-  replaceDynamicImports = spy_ "expr" >>> case _ of
+  replaceDynamicImports = case _ of
     NeutralExpr (App (NeutralExpr (Var qIdent)) b)
       | Just DynamicImportDir <- getExprDir env qIdent
       , Just { moduleName, exprIdent } <- getArrIdentQualified b ->
@@ -357,12 +355,13 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
     Map.lookup (EvalExtern id) imports >>= Map.lookup InlineRef
 
   getArrIdentQualified :: NonEmptyArray NeutralExpr -> Maybe { moduleName :: ModuleName, exprIdent :: Ident }
-  getArrIdentQualified = findMap getIdentQualified
+  getArrIdentQualified ns = findMap getIdentQualified ns
 
   getIdentQualified :: NeutralExpr -> Maybe { moduleName :: ModuleName, exprIdent :: Ident }
   getIdentQualified = unwrap >>> case _ of
     Var (Qualified (Just moduleName) exprIdent) -> Just { moduleName, exprIdent }
     Abs _ ne -> getIdentQualified ne
+    App ap ne -> getIdentQualified ap <|> getArrIdentQualified ne
     UncurriedApp ne _ -> getIdentQualified ne
     _ -> Nothing
 
