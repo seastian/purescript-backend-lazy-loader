@@ -124,6 +124,7 @@ import Data.Set as Set
 import Data.Traversable (class Foldable, Accum, foldr, for, mapAccumL, mapAccumR, sequence, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), fst, snd)
+import Debug (spy)
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import PureScript.Backend.Optimizer.Analysis (BackendAnalysis)
 import PureScript.Backend.Optimizer.CoreFn (Ann(..), Bind(..), Binder(..), Binding(..), CaseAlternative(..), CaseGuard(..), Comment, ConstructorType(..), Expr(..), Guard(..), Ident(..), Literal(..), Meta(..), Module(..), ModuleName(..), ProperName, Qualified(..), ReExport, findProp, propKey, propValue, qualifiedModuleName, unQualified)
@@ -340,8 +341,10 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
       )
   }
   where
+  spy_ = if unwrap env.currentModule == "Snapshot.DynamicImportMultipleTypeClasses" then spy else \_ a -> a
+  
   replaceDynamicImports :: NeutralExpr -> NeutralExpr
-  replaceDynamicImports = case _ of
+  replaceDynamicImports = spy_ "expr" >>> case _ of
     NeutralExpr (App (NeutralExpr (Var qIdent)) b)
       | Just DynamicImportDir <- getExprDir env qIdent
       , Just { moduleName, exprIdent } <- getArrIdentQualified b ->
