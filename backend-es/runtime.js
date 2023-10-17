@@ -31,7 +31,3 @@ export function intDiv(x, y) {
   if (y < 0) return -Math.floor(x / -y);
   return 0;
 }
-
-export function dynamicImport(moduleName, valueName){
-  return () => import(moduleName).then(m => m[valueName]);
-}
