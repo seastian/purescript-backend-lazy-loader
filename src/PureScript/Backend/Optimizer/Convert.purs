@@ -107,7 +107,7 @@ import Control.Monad.RWS (ask)
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NonEmptyArray
-import Data.Foldable (findMap, foldMap, foldl)
+import Data.Foldable (class Foldable, findMap, foldMap, foldl)
 import Data.FoldableWithIndex (foldMapWithIndex, foldlWithIndex, foldrWithIndex)
 import Data.Function (on)
 import Data.FunctorWithIndex (mapWithIndex)
@@ -345,25 +345,23 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
   replaceDynamicImports = case _ of
     NeutralExpr (App (NeutralExpr (Var qIdent)) b)
       | Just DynamicImportDir <- getExprDir env qIdent
-      , Just { moduleName, exprIdent } <- getArrIdentQualified b ->
+      , Just { moduleName, exprIdent } <- getBodyIdentQualified b ->
           NeutralExpr $ DynamicImport moduleName exprIdent b
 
     NeutralExpr expr -> NeutralExpr $ map replaceDynamicImports expr
 
-  getExprDir :: ConvertEnv -> _ -> (Maybe ImportDirective)
+  getExprDir :: ConvertEnv -> Qualified Ident -> (Maybe ImportDirective)
   getExprDir { directives: { imports } } id =
     Map.lookup (EvalExtern id) imports >>= Map.lookup InlineRef
 
-  getArrIdentQualified :: NonEmptyArray NeutralExpr -> Maybe { moduleName :: ModuleName, exprIdent :: Ident }
-  getArrIdentQualified ns = findMap getIdentQualified ns
+  getBodyIdentQualified :: forall f. Foldable f => f NeutralExpr -> Maybe { moduleName :: ModuleName, exprIdent :: Ident }
+  getBodyIdentQualified ns = findMap getIdentQualified ns
 
   getIdentQualified :: NeutralExpr -> Maybe { moduleName :: ModuleName, exprIdent :: Ident }
-  getIdentQualified = unwrap >>> case _ of
-    Var (Qualified (Just moduleName) exprIdent) -> Just { moduleName, exprIdent }
-    Abs _ ne -> getIdentQualified ne
-    App ap ne -> getIdentQualified ap <|> getArrIdentQualified ne
-    UncurriedApp ne _ -> getIdentQualified ne
-    _ -> Nothing
+  getIdentQualified ne = case unwrap ne of
+    Var (Qualified (Just moduleName) exprIdent) | moduleName /= env.currentModule -> Just { moduleName, exprIdent }
+    expr -> findMap getIdentQualified expr
+
 
 inferTransitiveDirective :: DirectiveMap -> ExternImpl -> BackendExpr -> Expr Ann -> Maybe (Map InlineAccessor InlineDirective)
 inferTransitiveDirective { inline: directives } impl backendExpr cfn = fromImpl <|> fromBackendExpr
