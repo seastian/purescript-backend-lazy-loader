@@ -5,8 +5,8 @@ import * as Data$dList$dTypes from "../Data.List.Types/index.js";
 import * as Data$dShow from "../Data.Show/index.js";
 import * as Effect$dAff from "../Effect.Aff/index.js";
 import * as Effect$dAff$dClass from "../Effect.Aff.Class/index.js";
-const addPreLazy = dictShow => dictMonadAff => dictFoldable => dictMonadAff.liftAff(Effect$dAff._bind(Effect$dAff._liftEffect((() => import("../Snapshot.AddPre/index.js").then(
-  Snapshot$dAddPre => Snapshot$dAddPre.addPre(dictShow)(dictFoldable)
+const addPreLazy = dictShow => dictMonadAff => dictFoldable => dictMonadAff.liftAff(Effect$dAff._bind(Effect$dAff._liftEffect((() => import("../Snapshot.DynamicImportExports/index.js").then(
+  Snapshot$dDynamicImportExports => Snapshot$dDynamicImportExports.addPre(dictShow)(dictFoldable)
 ))))(Control$dPromise.toAff$p(Control$dPromise.coerce)));
 const main = /* #__PURE__ */ (() => {
   const $0 = Effect$dAff._makeFiber(

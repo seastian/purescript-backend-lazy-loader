@@ -107,7 +107,7 @@ import Control.Monad.RWS (ask)
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NonEmptyArray
-import Data.Foldable (class Foldable, findMap, foldMap, foldl)
+import Data.Foldable (findMap, foldMap, foldl)
 import Data.FoldableWithIndex (foldMapWithIndex, foldlWithIndex, foldrWithIndex)
 import Data.Function (on)
 import Data.FunctorWithIndex (mapWithIndex)
@@ -124,7 +124,6 @@ import Data.Set as Set
 import Data.Traversable (class Foldable, Accum, foldr, for, mapAccumL, mapAccumR, sequence, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), fst, snd)
-import Debug (spy)
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import PureScript.Backend.Optimizer.Analysis (BackendAnalysis)
 import PureScript.Backend.Optimizer.CoreFn (Ann(..), Bind(..), Binder(..), Binding(..), CaseAlternative(..), CaseGuard(..), Comment, ConstructorType(..), Expr(..), Guard(..), Ident(..), Literal(..), Meta(..), Module(..), ModuleName(..), ProperName, Qualified(..), ReExport, findProp, propKey, propValue, qualifiedModuleName, unQualified)
@@ -361,7 +360,6 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
   getIdentQualified ne = case unwrap ne of
     Var (Qualified (Just moduleName) exprIdent) | moduleName /= env.currentModule -> Just { moduleName, exprIdent }
     expr -> findMap getIdentQualified expr
-
 
 inferTransitiveDirective :: DirectiveMap -> ExternImpl -> BackendExpr -> Expr Ann -> Maybe (Map InlineAccessor InlineDirective)
 inferTransitiveDirective { inline: directives } impl backendExpr cfn = fromImpl <|> fromBackendExpr

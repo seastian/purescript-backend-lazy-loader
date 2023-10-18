@@ -1,27 +1,24 @@
-module Snapshot.DynamicImportMultipleTypeClasses
+module Snapshot.DynamicImportMultipleTypeClassesLet
   ( main
   ) where
 
 import Prelude
 
 import Assert (assertEqual)
-import Data.Foldable (class Foldable)
+import Data.Array (reverse)
 import Data.List (List(..), (:))
 import DynamicImport (dynamicImportM)
 import Effect (Effect)
 import Effect.Aff (launchAff_)
-import Effect.Aff.Class (class MonadAff)
 import Effect.Class (liftEffect)
 import Snapshot.DynamicImportExports (addPre)
 
-addPreLazy :: forall m f a. Show a => MonadAff m => Foldable f => m (f a -> Array String)
-addPreLazy = dynamicImportM addPre
-
 main :: Effect Unit
 main = launchAff_ do
+  let addPreLazy = map (map reverse) $ dynamicImportM $ addPre
   addPre_ <- addPreLazy
   liftEffect $ assertEqual "DynamicImportMultipleTypeClasses/addPre"
-    { expected: [ "pre1", "pre2" ]
+    { expected: [ "pre2", "pre1" ]
     , actual: addPre_ (1 : 2 : Nil)
     }
 
