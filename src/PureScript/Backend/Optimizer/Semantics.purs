@@ -16,16 +16,17 @@ import Data.Lazy (Lazy, defer, force)
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.Monoid (power)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Set as Set
 import Data.Show.Generic (genericShow)
 import Data.String as String
 import Data.Tuple (Tuple(..), fst, snd)
+import Debug (spy)
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.Backend.Optimizer.Analysis (class HasAnalysis, BackendAnalysis(..), Capture(..), Complexity(..), ResultTerm(..), Usage(..), analysisOf, analyze, analyzeEffectBlock, bound, bump, complex, resultOf, updated, withResult, withRewrite)
-import PureScript.Backend.Optimizer.CoreFn (ConstructorType, Ident(..), Literal(..), ModuleName, Prop(..), ProperName, Qualified(..), findProp, propKey, propValue)
+import PureScript.Backend.Optimizer.CoreFn (ConstructorType, Ident(..), Literal(..), ModuleName(..), Prop(..), ProperName, Qualified(..), findProp, propKey, propValue)
 import PureScript.Backend.Optimizer.Syntax (class HasSyntax, BackendAccessor(..), BackendEffect, BackendOperator(..), BackendOperator1(..), BackendOperator2(..), BackendOperatorNum(..), BackendOperatorOrd(..), BackendSyntax(..), Level(..), Pair(..), syntaxOf)
 import PureScript.Backend.Optimizer.Utils (foldl1Array, foldr1Array)
 
@@ -171,8 +172,7 @@ data InlineDirective
 
 derive instance Eq InlineDirective
 derive instance Ord InlineDirective
-data ImportDirective
-  = DynamicImportDir
+data ImportDirective = DynamicImportDir
 
 derive instance Eq ImportDirective
 derive instance Ord ImportDirective
@@ -182,12 +182,12 @@ type DirectiveMap =
   , imports :: ImportDirectiveMap
   }
 
-type DirectiveSubMap a =  Map EvalRef (Map InlineAccessor a)
+type DirectiveSubMap a = Map EvalRef (Map InlineAccessor a)
 type InlineDirectiveMap = DirectiveSubMap InlineDirective
 type ImportDirectiveMap = DirectiveSubMap ImportDirective
 
 emptyDirectiveMap :: DirectiveMap
-emptyDirectiveMap = 
+emptyDirectiveMap =
   { inline: Map.empty
   , imports: Map.empty
   }
@@ -1206,6 +1206,9 @@ type Ctx =
   { currentLevel :: Int
   , lookupExtern :: Tuple (Qualified Ident) (Maybe BackendAccessor) -> Maybe (Tuple BackendAnalysis NeutralExpr)
   , effect :: Boolean
+  , inDynamicImport :: Boolean
+  , isDynamicImport :: Qualified Ident -> Boolean
+  , currentModule :: ModuleName
   }
 
 nextLevel :: Ctx -> Tuple Level Ctx
@@ -1214,7 +1217,7 @@ nextLevel ctx = Tuple (Level ctx.currentLevel) $ ctx { currentLevel = ctx.curren
 quote :: Ctx -> BackendSemantics -> BackendExpr
 quote = go
   where
-  go ctx = case _ of
+  go ctx bs = case bs of
     -- Block constructors
     SemLet ident binding k -> do
       let Tuple level ctx' = nextLevel ctx
@@ -1251,7 +1254,8 @@ quote = go
         EvalLocal ident lvl ->
           go ctx $ neutralSpine (NeutLocal ident lvl) sp
     SemLam ident k -> do
-      let Tuple level ctx' = nextLevel ctx
+      let
+        Tuple level ctx' = nextLevel ctx
       build ctx $ Abs (NonEmptyArray.singleton (Tuple ident level)) $ quote (ctx' { effect = false }) $ k $ NeutLocal ident level
     SemMkFn pro -> do
       let
@@ -1302,7 +1306,7 @@ quote = go
       let hd' = quote ctx' hd
       build ctx $ UncurriedEffectApp hd' (quote ctx' <$> spine)
     NeutApp hd spine -> do
-      let ctx' = ctx { effect = false }
+      let ctx' = (if isDynamicVar hd then inDynamic else identity) ctx { effect = false }
       let hd' = quote ctx' hd
       case NonEmptyArray.fromArray (quote ctx' <$> spine) of
         Nothing ->
@@ -1323,10 +1327,26 @@ quote = go
       build ctx PrimUndefined
     NeutFail err ->
       build ctx $ Fail err
-    SemDynamicImport mod val body -> build ctx $ DynamicImport mod val (quote ctx <$> body)
+    SemDynamicImport mod val body -> build ctx $ DynamicImport mod val (quote ctx { inDynamicImport = true } <$> body)
+
+    where
+    spy_ :: forall a. String -> a -> a
+    spy_ s =
+      if
+        unwrap ctx.currentModule == "Snapshot.DynamicImportTypeClassConcrete"
+          && ctx.inDynamicImport then spy s
+      else identity
+
+    inDynamic = _ { inDynamicImport = true }
+
+    isDynamicVar :: BackendSemantics -> Boolean
+    isDynamicVar = case _ of
+      NeutVar qual -> ctx.isDynamicImport qual
+      NeutStop qual -> ctx.isDynamicImport qual
+      _ -> false
 
 build :: Ctx -> BackendSyntax BackendExpr -> BackendExpr
-build ctx = case _ of
+build ctx bs = case bs of
   App (ExprSyntax _ (App hd tl1)) tl2 ->
     build ctx $ App hd (tl1 <> tl2)
   Abs ids1 (ExprSyntax _ (Abs ids2 body)) ->
@@ -1422,6 +1442,13 @@ build ctx = case _ of
     expr
   expr ->
     buildDefault ctx expr
+  where
+  spy_ :: forall a. String -> a -> a
+  spy_ s =
+    if
+      unwrap ctx.currentModule == "Snapshot.DynamicImportTypeClassConcrete"
+        && ctx.inDynamicImport then spy s
+    else identity
 
 buildBranchCond :: Ctx -> Pair BackendExpr -> BackendExpr -> BackendExpr
 buildBranchCond ctx (Pair a b) c = case b of
@@ -1739,6 +1766,15 @@ optimize traceSteps ctx env (Qualified mn (Ident id)) initN originalExpr =
         let expr2 = quote ctx (eval env expr1)
         let BackendAnalysis { rewrite } = analysisOf expr2
         Tuple rewrite expr2
+
+  isVal =
+    unwrap (unwrap env).currentModule == "Snapshot.DynamicImportTypeClassConcrete"
+      && (id) == "addPreLazy"
+
+  spy_ :: forall a. String -> a -> a
+  spy_ s a =
+    if isVal then spy s a
+    else a
 
 freeze :: BackendExpr -> Tuple BackendAnalysis NeutralExpr
 freeze init = Tuple (analysisOf init) $ foldBackendExpr NeutralExpr (\_ neutExpr -> neutExpr) init

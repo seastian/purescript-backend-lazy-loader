@@ -11,8 +11,11 @@ import Data.List (List, foldM)
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
+import Data.Newtype (unwrap)
 import Data.Set (Set)
+import Data.Set as Set
 import Data.Tuple (Tuple(..))
+import Debug (spy)
 import PureScript.Backend.Optimizer.Analysis (BackendAnalysis)
 import PureScript.Backend.Optimizer.Convert (BackendModule, OptimizationSteps, toBackendModule)
 import PureScript.Backend.Optimizer.CoreFn (Ann, Ident, Module(..), Qualified)
@@ -40,7 +43,7 @@ buildModules options coreFnModules =
   void $ foldM go { directives: options.directives, implementations: Map.empty, moduleIndex: 0 } coreFnModules
   where
   moduleCount = List.length coreFnModules
-  go { directives, implementations, moduleIndex } coreFnModule = do
+  go { directives, implementations, moduleIndex } coreFnModule@(Module mod) = do
     let buildEnv = { implementations, moduleCount, moduleIndex }
     coreFnModule'@(Module { name }) <- options.onPrepareModule buildEnv coreFnModule
     let
@@ -55,6 +58,7 @@ buildModules options coreFnModules =
         , foreignSemantics: options.foreignSemantics
         , rewriteLimit: 10_000
         , traceIdents: options.traceIdents
+        , identsReplacedByDynamicImports: Set.empty
         , optimizationSteps: []
         }
       newImplementations =
@@ -69,3 +73,15 @@ buildModules options coreFnModules =
       , implementations: newImplementations
       , moduleIndex: moduleIndex + 1
       }
+    where
+    isVal =
+      unwrap mod.name == "Snapshot.DynamicImportTypeClassConcrete"
+
+    -- && (unwrap ident) == "addPreLazy"
+
+    spy_ :: forall a. String -> a -> a
+    spy_ s a =
+      if isVal then spy s a
+      else a
+
+    -- _ = spy_ "cofeFnMod" mod.decls

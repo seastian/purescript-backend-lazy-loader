@@ -107,6 +107,7 @@ import Control.Monad.RWS (ask)
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NonEmptyArray
+import Data.Filterable (filter)
 import Data.Foldable (findMap, foldMap, foldl)
 import Data.FoldableWithIndex (foldMapWithIndex, foldlWithIndex, foldrWithIndex)
 import Data.Function (on)
@@ -124,6 +125,7 @@ import Data.Set as Set
 import Data.Traversable (class Foldable, Accum, foldr, for, mapAccumL, mapAccumR, sequence, traverse)
 import Data.TraversableWithIndex (forWithIndex)
 import Data.Tuple (Tuple(..), fst, snd)
+import Debug (spy, spyWith)
 import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 import PureScript.Backend.Optimizer.Analysis (BackendAnalysis)
 import PureScript.Backend.Optimizer.CoreFn (Ann(..), Bind(..), Binder(..), Binding(..), CaseAlternative(..), CaseGuard(..), Comment, ConstructorType(..), Expr(..), Guard(..), Ident(..), Literal(..), Meta(..), Module(..), ModuleName(..), ProperName, Qualified(..), ReExport, findProp, propKey, propValue, qualifiedModuleName, unQualified)
@@ -133,6 +135,7 @@ import PureScript.Backend.Optimizer.Semantics.Foreign (ForeignEval)
 import PureScript.Backend.Optimizer.Syntax (BackendAccessor(..), BackendOperator(..), BackendOperator1(..), BackendOperator2(..), BackendOperatorOrd(..), BackendSyntax(..), Level(..), Pair(..))
 import PureScript.Backend.Optimizer.Utils (foldl1Array)
 import Safe.Coerce (coerce)
+import Unsafe.Coerce (unsafeCoerce)
 
 type BackendBindingGroup a b =
   { recursive :: Boolean
@@ -166,13 +169,16 @@ type ConvertEnv =
   , foreignSemantics :: Map (Qualified Ident) ForeignEval
   , rewriteLimit :: Int
   , traceIdents :: Set (Qualified Ident)
+  , identsReplacedByDynamicImports :: Set (Qualified Ident)
   }
 
 type ConvertM = Function ConvertEnv
 
 toBackendModule :: Module Ann -> ConvertM (Tuple OptimizationSteps BackendModule)
-toBackendModule (Module mod) env = do
+toBackendModule (Module modExpanded) env = do
   let
+    mod = modExpanded { decls = collapseSyntheticBindingsInDynamicImports env modExpanded.decls }
+
     directives :: DirectiveHeaderResult
     directives = parseDirectiveHeader mod.name mod.comments
 
@@ -218,6 +224,14 @@ toBackendModule (Module mod) env = do
       , moduleImplementations = Map.empty
       }
 
+    moduleBindings' =
+      moduleBindings
+        { value = moduleBindings.value <#> \b -> b
+            { bindings = b.bindings # filter \(Tuple ident _) ->
+                not Set.member (Qualified (Just mod.name) ident) moduleBindings.accum.identsReplacedByDynamicImports
+            }
+        }
+
     localExports :: Set Ident
     localExports = Set.fromFoldable mod.exports
 
@@ -253,14 +267,14 @@ toBackendModule (Module mod) env = do
           }
       )
       Set.empty
-      moduleBindings.value
+      moduleBindings'.value
 
     usedImports :: Set ModuleName
     usedImports = usedBindings.accum # Set.mapMaybe \qi -> do
       mn <- qualifiedModuleName qi
       mn <$ guard (mn /= mod.name && mn /= ModuleName "Prim")
 
-  Tuple moduleBindings.accum.optimizationSteps $
+  Tuple moduleBindings'.accum.optimizationSteps $
     { name: mod.name
     , comments: mod.comments
     , imports: usedImports
@@ -268,10 +282,28 @@ toBackendModule (Module mod) env = do
     , bindings: usedBindings.value
     , exports: localExports
     , reExports: Set.fromFoldable mod.reExports
-    , implementations: moduleBindings.accum.moduleImplementations
+    , implementations: moduleBindings'.accum.moduleImplementations
     , directives: directives.exports
     , foreign: Set.fromFoldable mod.foreign
     }
+  where
+  isVal =
+    unwrap (env).currentModule == "Snapshot.DynamicImportTypeClassConcrete"
+
+  -- && (unwrap ident) == "addPreLazy"
+
+  spy_ :: forall a. String -> a -> a
+  spy_ s a =
+    if isVal then spy s a
+    else a
+
+  spyWith_ :: forall a b. String -> (a -> b) -> a -> a
+  spyWith_ s f a =
+    if isVal then spyWith s f a
+    else a
+
+collapseSyntheticBindingsInDynamicImports :: ConvertEnv -> Array (Bind Ann) -> Array (Bind Ann)
+collapseSyntheticBindingsInDynamicImports env bindings = bindings
 
 type WithDeps = Tuple (Set (Qualified Ident))
 
@@ -313,6 +345,7 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
   let enableTracing = Set.member qualifiedIdent env.traceIdents
   let Tuple mbSteps optimizedExpr = optimize enableTracing (getCtx env) evalEnv qualifiedIdent env.rewriteLimit backendExpr
   let Tuple impl expr' = toExternImpl env group optimizedExpr
+  let Tuple replaced expr'' = replaceDynamicImports expr'
   { accum: env
       { implementations = Map.insert qualifiedIdent impl env.implementations
       , moduleImplementations = Map.insert qualifiedIdent impl env.moduleImplementations
@@ -332,22 +365,34 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
                 env.directives
             Nothing ->
               env.directives
+      , identsReplacedByDynamicImports = replaced <> env.identsReplacedByDynamicImports
       }
   , value: Tuple ident
       ( Tuple (unwrap (fst impl)).deps
-          $ replaceDynamicImports
-          $ expr'
+          $ expr''
       )
   }
   where
-  replaceDynamicImports :: NeutralExpr -> NeutralExpr
+  isVal =
+    unwrap (env).currentModule == "Snapshot.DynamicImportTypeClassConcrete"
+      && (unwrap ident) == "addPreLazy"
+
+  spy_ :: forall a. String -> a -> a
+  spy_ s a =
+    if isVal then spy s a
+    else a
+
+  replaceDynamicImports :: NeutralExpr -> Tuple (Set (Qualified Ident)) NeutralExpr
   replaceDynamicImports = case _ of
     NeutralExpr (App (NeutralExpr (Var qIdent)) b)
       | Just DynamicImportDir <- getExprDir env qIdent
       , Just { moduleName, exprIdent } <- getBodyIdentQualified b ->
-          NeutralExpr $ DynamicImport moduleName exprIdent b
+          let
+            Tuple removed b' = expandLocalVars b
+          in
+            Tuple removed $ NeutralExpr $ DynamicImport moduleName exprIdent $ b'
 
-    NeutralExpr expr -> NeutralExpr $ map replaceDynamicImports expr
+    NeutralExpr expr -> coerce $ traverse replaceDynamicImports expr
 
   getExprDir :: ConvertEnv -> Qualified Ident -> (Maybe ImportDirective)
   getExprDir { directives: { imports } } id =
@@ -358,8 +403,28 @@ toTopLevelBackendBinding group env (Binding _ ident cfn) = do
 
   getIdentQualified :: NeutralExpr -> Maybe { moduleName :: ModuleName, exprIdent :: Ident }
   getIdentQualified ne = case unwrap ne of
-    Var (Qualified (Just moduleName) exprIdent) | moduleName /= env.currentModule -> Just { moduleName, exprIdent }
+    Var qual@(Qualified (Just moduleName) exprIdent) ->
+      if moduleName == env.currentModule then
+        lookupExpr qual >>= getIdentQualified
+      else
+        Just { moduleName, exprIdent }
     expr -> findMap getIdentQualified expr
+
+  expandLocalVars :: NonEmptyArray NeutralExpr -> Tuple (Set (Qualified Ident)) (NonEmptyArray NeutralExpr)
+  expandLocalVars ns = traverse expandLocalVar ns
+
+  expandLocalVar :: NeutralExpr -> Tuple (Set (Qualified Ident)) NeutralExpr
+  expandLocalVar (NeutralExpr expr) = case expr of
+    Var qual@(Qualified (Just moduleName) _)
+      | moduleName == env.currentModule
+      , Just foundExpr <- lookupExpr qual -> Tuple (Set.singleton qual) foundExpr
+    _ ->
+      coerce $ traverse expandLocalVar expr
+
+  lookupExpr :: Qualified Ident -> Maybe NeutralExpr
+  lookupExpr qual = Map.lookup qual env.moduleImplementations >>= \(Tuple _ impl) -> case impl of
+    ExternExpr _ ne' -> Just ne'
+    _ -> Nothing
 
 inferTransitiveDirective :: DirectiveMap -> ExternImpl -> BackendExpr -> Expr Ann -> Maybe (Map InlineAccessor InlineDirective)
 inferTransitiveDirective { inline: directives } impl backendExpr cfn = fromImpl <|> fromBackendExpr
@@ -450,8 +515,11 @@ buildM a env = build (getCtx env) a
 getCtx :: ConvertEnv -> Ctx
 getCtx env =
   { currentLevel: env.currentLevel
+  , currentModule: env.currentModule
   , lookupExtern
   , effect: false
+  , inDynamicImport: false
+  , isDynamicImport: \ident -> Map.lookup (EvalExtern ident) env.directives.imports >>= Map.lookup InlineRef # eq (Just DynamicImportDir)
   }
   where
   lookupExtern (Tuple qual acc) = do

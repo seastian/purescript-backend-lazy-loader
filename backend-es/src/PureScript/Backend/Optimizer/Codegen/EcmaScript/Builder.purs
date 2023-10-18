@@ -15,10 +15,12 @@ import Data.Lazy as Lazy
 import Data.List (List)
 import Data.Map (Map)
 import Data.Maybe (maybe)
+import Data.Newtype (unwrap)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.Set.NonEmpty as NonEmptySet
 import Data.Tuple (Tuple(..))
+import Debug (spy)
 import Effect.Aff (Aff, parallel, sequential)
 import Effect.Class (liftEffect)
 import Effect.Class.Console as Console
@@ -29,7 +31,7 @@ import Node.Path (FilePath)
 import Node.Process as Process
 import PureScript.Backend.Optimizer.Builder (BuildEnv, buildModules)
 import PureScript.Backend.Optimizer.Convert (BackendModule, OptimizationSteps)
-import PureScript.Backend.Optimizer.CoreFn (Ann, Ident, Module, ModuleName(..), Qualified)
+import PureScript.Backend.Optimizer.CoreFn (Ann, Ident, Module(..), ModuleName(..), Qualified)
 import PureScript.Backend.Optimizer.CoreFn.Json (decodeModule)
 import PureScript.Backend.Optimizer.CoreFn.Sort (emptyPull, pullResult, resumePull, sortModules)
 import PureScript.Backend.Optimizer.Directives (parseDirectiveFile)
