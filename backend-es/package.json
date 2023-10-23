@@ -1,5 +1,5 @@
 {
-  "name": "purs-backend-es",
+  "name": "@seastian/purs-backend-es",
   "version": "1.3.2",
   "description": "A modern ECMAScript optimizing backend for PureScript",
   "main": "index.js",
